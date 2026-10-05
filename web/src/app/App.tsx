@@ -75,9 +75,21 @@ export function Workspace({
       setError("This source is not available to your account.");
       return;
     }
+    const sourceWindow = window.open("about:blank", "_blank");
+    if (!sourceWindow) {
+      setError(
+        "Your browser blocked the source window. Allow pop-ups and retry.",
+      );
+      return;
+    }
+    sourceWindow.opener = null;
     try {
-      await api.openDocument(session.accessToken, id);
+      const url = await api.openDocument(session.accessToken, id);
+      if (new URL(url).protocol !== "https:")
+        throw new Error("Invalid source URL");
+      sourceWindow.location.replace(url);
     } catch {
+      sourceWindow.close();
       setError("The source could not be opened. Please try again.");
     }
   };

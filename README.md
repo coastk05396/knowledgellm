@@ -29,7 +29,7 @@ The frontend starts without credentials but disables sign-in. Copy `web/.env.exa
 
 ## AWS prototype setup
 
-The SAM template creates a Cognito user pool, managed-login domain, OAuth client, three department groups, a private encrypted/versioned S3 bucket, a JWT-protected HTTP API, and Lambda functions for access-scoped documents, chat, and ingestion. Choose a globally unique lowercase `CognitoDomainPrefix`, and set the callback/logout URLs and `WebOrigin` for the exact web origin before deployment. The browser client uses authorization code with PKCE and has no client secret. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
+The SAM template creates a Cognito user pool, managed-login domain and default branding style, OAuth client, three department groups, a private encrypted/versioned S3 bucket, a JWT-protected HTTP API, and Lambda functions for access-scoped documents, chat, and ingestion. Choose a globally unique lowercase `CognitoDomainPrefix`, and set the callback/logout URLs and `WebOrigin` for the exact web origin before deployment. The browser client uses authorization code with PKCE and has no client secret. Protected API routes require the `openid` scope and accept Cognito access tokens only. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
 
 Create Qdrant and Groq credentials outside the repository and save each in AWS Secrets Manager. Pass their secret ARNs and the Qdrant URL to SAM; the Lambdas read secret values at runtime. Review current AWS, Qdrant, and Groq charges, retention terms, quotas, account eligibility, and region before provisioning anything. No cloud resources are created by the local development commands.
 
@@ -42,7 +42,7 @@ sam build --template-file template.yaml
 
 After environment-specific values and provider secrets are ready, an authorized operator can run `sam deploy --guided`. Deployment provisions billable cloud resources and is intentionally separate from local setup.
 
-After an approved deployment, upload only the fictional samples to the bucket output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `GroqInputRatePerMillionUsd` and `GroqOutputRatePerMillionUsd` from current pricing to show cost estimates; otherwise cost is reported as unavailable.
+After an approved deployment, upload only the fictional samples to the bucket output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. Ingestion creates Qdrant keyword indexes for `department` and `document_id` before replacing filtered records. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `GroqInputRatePerMillionUsd` and `GroqOutputRatePerMillionUsd` from current pricing to show cost estimates; otherwise cost is reported as unavailable.
 
 ## Access and prototype limits
 

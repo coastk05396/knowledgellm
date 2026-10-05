@@ -14,7 +14,7 @@ export interface ChatAnswer {
 export interface KnowledgeApi {
   loadDocuments(token: string): Promise<DocumentSummary[]>;
   askQuestion(token: string, question: string): Promise<ChatAnswer>;
-  openDocument(token: string, id: string): Promise<void>;
+  openDocument(token: string, id: string): Promise<string>;
 }
 async function request(
   path: string,
@@ -94,6 +94,6 @@ export const knowledgeApi: KnowledgeApi = {
       new URL(data.document.url).protocol !== "https:"
     )
       throw new Error("Invalid document link");
-    window.location.assign(data.document.url);
+    return data.document.url;
   },
 };

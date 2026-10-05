@@ -71,16 +71,8 @@ describe("Knowledge API boundary", () => {
       "https://api.example.com/documents/finance%2Fid%20with%20spaces",
     );
   });
-  it("opens the authorized source URL from the document envelope", async () => {
+  it("returns the authorized HTTPS source URL from the document envelope", async () => {
     appConfig.apiUrl = "https://api.example.com";
-    let destination = "";
-    vi.stubGlobal("window", {
-      location: {
-        assign: (url: string) => {
-          destination = url;
-        },
-      },
-    });
     vi.stubGlobal(
       "fetch",
       async () =>
@@ -94,7 +86,7 @@ describe("Knowledge API boundary", () => {
           }),
         ),
     );
-    await knowledgeApi.openDocument(
+    const destination = await knowledgeApi.openDocument(
       "access-token",
       "finance-q4-budget-overview",
     );

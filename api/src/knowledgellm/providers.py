@@ -43,6 +43,13 @@ class QdrantVectorIndex(VectorIndex):
                 collection_name=self.collection_name,
                 vectors_config=models.VectorParams(size=model.embedding_size, distance=models.Distance.COSINE),
             )
+        for field_name in ("department", "document_id"):
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+                wait=True,
+            )
 
     def replace_document(self, document_id: str, records: list[dict[str, object]]) -> None:
         from qdrant_client import models

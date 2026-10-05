@@ -63,8 +63,16 @@ h2 {
   border: 0;
 }
 .mobile-only,
-.mobile-monitor {
+.mobile-monitor,
+.mobile-status,
+.mobile-copy {
   display: none;
+}
+.desktop-copy {
+  display: block;
+}
+.desktop-only {
+  display: inline;
 }
 .workspace {
   display: grid;
@@ -436,12 +444,20 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--finance);
   background: var(--raised);
   border: 0;
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 12px;
+}
+.citations.finance button {
+  color: var(--finance);
+}
+.citations.operations button {
+  color: var(--operations);
+}
+.citations.people button {
+  color: var(--people);
 }
 .citations button span {
   margin-left: 4px;
@@ -640,8 +656,15 @@ h2 {
     letter-spacing: 1.8px;
     margin-bottom: 15px;
   }
+  .desktop-only,
+  .desktop-copy {
+    display: none;
+  }
   .mobile-only {
     display: inline;
+  }
+  .mobile-copy {
+    display: block;
   }
   .identity-cards {
     overflow-x: auto;
@@ -743,6 +766,20 @@ h2 {
     font:
       500 12px "IBM Plex Mono",
       monospace;
+  }
+  .mobile-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--green);
+    font:
+      500 11px "IBM Plex Mono",
+      monospace;
+    text-transform: uppercase;
+  }
+  .mobile-status .status-dot {
+    width: 7px;
+    height: 7px;
   }
   .chat-heading h2 svg {
     width: 20px;

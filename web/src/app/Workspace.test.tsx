@@ -1,9 +1,42 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Workspace } from "./App";
 
 const session = { accessToken: "access", name: "Alex Morgan" };
+afterEach(() => vi.unstubAllGlobals());
 describe("Authorized knowledge workspace", () => {
+  it("keeps the mobile identity and status copy aligned with the reference", async () => {
+    render(
+      <Workspace
+        session={session}
+        onSwitch={async () => {}}
+        api={{
+          loadDocuments: async () => [
+            {
+              id: "finance-q4",
+              title: "Q4 budget overview",
+              department: "finance",
+            },
+          ],
+          askQuestion: async () => ({ answer: "", citations: [] }),
+          openDocument: async () => "https://docs.example.com/source.md",
+        }}
+      />,
+    );
+    expect(
+      await screen.findByText(
+        "Answers use only Finance files Alex can access.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Tap to switch")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Sign in as another account: Alex, Finance",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("only displays documents received from the authorized API", async () => {
     render(
       <Workspace
@@ -18,7 +51,7 @@ describe("Authorized knowledge workspace", () => {
             },
           ],
           askQuestion: async () => ({ answer: "", citations: [] }),
-          openDocument: async () => {},
+          openDocument: async () => "https://docs.example.com/source.md",
         }}
       />,
     );
@@ -33,6 +66,11 @@ describe("Authorized knowledge workspace", () => {
   it("sends questions, displays cited answers, and clears the conversation", async () => {
     let submitted = "";
     let opened = "";
+    vi.stubGlobal("open", () => ({
+      opener: null,
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    }));
     render(
       <Workspace
         session={session}
@@ -56,6 +94,7 @@ describe("Authorized knowledge workspace", () => {
           },
           openDocument: async (_token, id) => {
             opened = id;
+            return "https://docs.example.com/source.md";
           },
         }}
       />,
@@ -84,7 +123,7 @@ describe("Authorized knowledge workspace", () => {
             throw new Error("secret provider detail");
           },
           askQuestion: async () => ({ answer: "", citations: [] }),
-          openDocument: async () => {},
+          openDocument: async () => "https://docs.example.com/source.md",
         }}
       />,
     );
@@ -117,7 +156,7 @@ it("clears protected content immediately when account switching begins", async (
           },
         ],
         askQuestion: async () => ({ answer: "", citations: [] }),
-        openDocument: async () => {},
+        openDocument: async () => "https://docs.example.com/source.md",
       }}
     />,
   );
@@ -134,6 +173,11 @@ it("clears protected content immediately when account switching begins", async (
   expect(screen.getByRole("textbox", { name: "Your question" })).toBeDisabled();
 });
 it("displays source and provider failures without rendering internal details", async () => {
+  vi.stubGlobal("open", () => ({
+    opener: null,
+    location: { replace: vi.fn() },
+    close: vi.fn(),
+  }));
   render(
     <Workspace
       session={session}
@@ -196,7 +240,7 @@ it("rejects answers whose citations are outside the authorized listing", async (
             { document_id: "people-handbook", title: "Employee handbook" },
           ],
         }),
-        openDocument: async () => {},
+        openDocument: async () => "https://docs.example.com/source.md",
       }}
     />,
   );
@@ -212,4 +256,56 @@ it("rejects answers whose citations are outside the authorized listing", async (
   );
   expect(screen.queryByText("Restricted answer")).not.toBeInTheDocument();
   expect(screen.queryByText("Employee handbook")).not.toBeInTheDocument();
+});
+
+it("opens a citation in a separate tab so the active conversation stays open", async () => {
+  const sourceWindow = {
+    opener: window,
+    location: { replace: vi.fn() },
+    close: vi.fn(),
+  };
+  const open = vi.fn(() => sourceWindow as unknown as Window);
+  vi.stubGlobal("open", open);
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => [
+          {
+            id: "finance-q4",
+            title: "Q4 budget overview",
+            department: "finance",
+          },
+        ],
+        askQuestion: async () => ({
+          answer: "Vendor costs changed.",
+          citations: [
+            { document_id: "finance-q4", title: "Q4 budget overview" },
+          ],
+        }),
+        openDocument: async () =>
+          "https://docs.example.com/finance/q4-budget-overview.md",
+      }}
+    />,
+  );
+  await screen.findByRole("button", { name: "Q4 budget overview" });
+  fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
+    target: { value: "What changed?" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+  expect(await screen.findByText("Vendor costs changed.")).toBeVisible();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Source: Q4 budget overview" }),
+  );
+
+  await waitFor(() =>
+    expect(sourceWindow.location.replace).toHaveBeenCalledWith(
+      "https://docs.example.com/finance/q4-budget-overview.md",
+    ),
+  );
+  expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+  expect(sourceWindow.opener).toBeNull();
+  expect(screen.getByText("Vendor costs changed.")).toBeVisible();
 });

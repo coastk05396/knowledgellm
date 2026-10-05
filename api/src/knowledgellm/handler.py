@@ -57,7 +57,11 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
     authorizer = request_context.get("authorizer")
     jwt = authorizer.get("jwt") if isinstance(authorizer, dict) else None
     claims = jwt.get("claims") if isinstance(jwt, dict) else None
-    if not isinstance(claims, dict) or not all(isinstance(key, str) for key in claims):
+    if (
+        not isinstance(claims, dict)
+        or not all(isinstance(key, str) for key in claims)
+        or claims.get("token_use") != "access"
+    ):
         return _response(401, {"error": "unauthenticated"})
 
     departments = departments_for_claims(claims)

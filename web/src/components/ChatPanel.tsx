@@ -40,6 +40,10 @@ export function ChatPanel({
             <MessageSquare className="mobile-only" />
             02. Ask KnowledgeLLM
           </h2>
+          <span className="mobile-status">
+            <span className="status-dot" />
+            Active
+          </span>
           <p>Access-scoped answers with source citations</p>
         </div>
         <button className="new-chat" onClick={onNew} disabled={busy}>
@@ -60,9 +64,16 @@ export function ChatPanel({
               : "Your knowledge. Your access."}
           </h1>
           <p className="intro-copy">
-            {signedIn
-              ? `KnowledgeLLM answers from ${access || "permitted"} documents that ${name.split(" ")[0]} is permitted to view. Sign in with a different account to switch departments.`
-              : "Sign in to browse your department's documents and get answers backed by the sources you can access."}
+            <span className="desktop-copy">
+              {signedIn
+                ? `KnowledgeLLM answers from ${access || "permitted"} documents that ${name.split(" ")[0]} is permitted to view. Sign in with a different account to switch departments.`
+                : "Sign in to browse your department's documents and get answers backed by the sources you can access."}
+            </span>
+            <span className="mobile-copy">
+              {signedIn
+                ? `Answers use only ${access} files ${name.split(" ")[0]} can access.`
+                : "Sign in to browse your permitted department files."}
+            </span>
           </p>
           <div className="badges">
             <span className="department-badge">
@@ -96,7 +107,7 @@ export function ChatPanel({
                 <div>
                   <p className="message-label">KnowledgeLLM assistant</p>
                   <p className="message-text">{message.response.answer}</p>
-                  <div className="citations">
+                  <div className={`citations ${departments[0] ?? "finance"}`}>
                     {message.response.citations.map((citation) => (
                       <button
                         key={citation.document_id}

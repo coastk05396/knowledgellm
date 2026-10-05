@@ -129,3 +129,17 @@ Ruling: Qdrant document IDs are opaque single path segments while S3 keys retain
 - [x] Audit configuration: examples contain blank credentials, S3 public access is blocked, and no demo identity grants access.
 - [x] Update product status, unresolved configuration requirements, commands, evidence, and next action.
 - [x] Commit as `docs: document local setup and prototype deployment`.
+
+### Task 6: Independent Review Follow-up and Final Verification
+
+**Files:**
+- Modify: `template.yaml`, `api/src/knowledgellm/handler.py`, `api/src/knowledgellm/providers.py`, and focused API/web tests.
+- Modify: `web/src/app/App.tsx`, `web/src/components/Composer.tsx`, related UI copy/styles, and product verification notes.
+
+- [x] Add Cognito managed-login branding and require scoped access tokens at protected API routes.
+- [x] Create Qdrant keyword indexes for department and document filters before retrieval or replacement.
+- [x] Keep the current chat visible when citations open; preserve IME composition in the message composer.
+- [x] Refine identity/status/citation UI to match desktop and mobile references while keeping unauthorized document metadata hidden.
+- [x] Confirm regression tests fail before fixes and pass after: web 18 tests; API 37 tests.
+- [x] Verify frontend production build, Prettier, npm audit, SAM lint validation, and SAM build.
+- [ ] Push the signed feature branch and open a PR against the newly published `main` baseline.

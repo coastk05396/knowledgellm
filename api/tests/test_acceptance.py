@@ -22,7 +22,14 @@ def test_each_identity_receives_only_its_two_sample_documents(
             "queryStringParameters": {"department": "people" if department != "people" else "finance"},
             "requestContext": {
                 "http": {"method": "GET"},
-                "authorizer": {"jwt": {"claims": {"cognito:groups": f'["{department}"]'}}},
+                "authorizer": {
+                    "jwt": {
+                        "claims": {
+                            "token_use": "access",
+                            "cognito:groups": f'["{department}"]',
+                        }
+                    }
+                },
             },
         },
         object(),

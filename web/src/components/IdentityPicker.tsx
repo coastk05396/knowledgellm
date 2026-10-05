@@ -21,8 +21,9 @@ export function IdentityPicker({
   return (
     <div className="identity-picker">
       <div className="identity-label">
-        <span>View as</span>
-        <span className="mobile-only">Sign in to switch</span>
+        <span className="desktop-only">Identity</span>
+        <span className="mobile-only">View as</span>
+        <span>Tap to switch</span>
       </div>
       <div className="identity-cards">
         {identities.map((person) => (
@@ -32,6 +33,7 @@ export function IdentityPicker({
             type="button"
             onClick={onSwitch}
             disabled={disabled}
+            aria-pressed={departments.includes(person.department)}
             aria-label={`Sign in as another account: ${person.name}, ${person.label}`}
             aria-describedby="account-switch-note"
           >

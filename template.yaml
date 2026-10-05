@@ -129,6 +129,13 @@ Resources:
       UserPoolId: !Ref CognitoUserPool
       ManagedLoginVersion: 2
 
+  CognitoManagedLoginBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientId: !Ref CognitoUserPoolClient
+      UseCognitoProvidedValues: true
+
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -200,6 +207,8 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - openid
         OpenDocument:
           Type: HttpApi
           Properties:
@@ -208,6 +217,8 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - openid
         AskQuestion:
           Type: HttpApi
           Properties:
@@ -216,6 +227,8 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoJwt
+              AuthorizationScopes:
+                - openid
 
   IngestionFunction:
     Type: AWS::Serverless::Function
@@ -233,7 +246,7 @@ Resources:
               Resource: !Ref QdrantApiKeySecretArn
       Events:
         ObjectCreated:
-          Type: EventBridge
+          Type: EventBridgeRule
           Properties:
             Pattern:
               source:
