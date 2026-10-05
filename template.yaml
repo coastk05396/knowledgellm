@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: KnowledgeLLM permission-aware knowledge assistant prototype
+
+Parameters:
+  CognitoIssuer:
+    Type: String
+    Description: Cognito user pool issuer URL
+  CognitoAudience:
+    Type: String
+    Description: Cognito app client ID
+  QdrantUrl:
+    Type: String
+    NoEcho: true
+    Description: Qdrant cluster URL; supply through deployment configuration
+  QdrantApiKey:
+    Type: String
+    NoEcho: true
+    Description: Qdrant API key; supply through deployment configuration
+  GroqApiKey:
+    Type: String
+    NoEcho: true
+    Description: Groq API key; supply through deployment configuration
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 20
+    MemorySize: 512
+    Environment:
+      Variables:
+        DOCUMENTS_BUCKET: !Ref DocumentsBucket
+        QDRANT_URL: !Ref QdrantUrl
+        QDRANT_API_KEY: !Ref QdrantApiKey
+        GROQ_API_KEY: !Ref GroqApiKey
+
+Resources:
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  KnowledgeApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: '$request.header.Authorization'
+            JwtConfiguration:
+              issuer: !Ref CognitoIssuer
+              audience:
+                - !Ref CognitoAudience
+
+  KnowledgeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: api/src/
+      Handler: knowledgellm.handler.handler
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref DocumentsBucket
+      Events:
+        ListDocuments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref KnowledgeApi
+            Path: /documents
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwt
+        OpenDocument:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref KnowledgeApi
+            Path: /documents/{documentId}
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwt
+        AskQuestion:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref KnowledgeApi
+            Path: /chat
+            Method: POST
+            Auth:
+              Authorizer: CognitoJwt
+
+  IngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: api/src/
+      Handler: knowledgellm.ingest.handler
+      Timeout: 120
+      MemorySize: 1024
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref DocumentsBucket
+
+Outputs:
+  ApiUrl:
+    Value: !Sub 'https://${KnowledgeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+  DocumentsBucketName:
+    Value: !Ref DocumentsBucket
