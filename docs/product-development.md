@@ -18,7 +18,8 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 | --- | --- | --- |
 | Product/design specification and acceptance criteria | Coordinator | Complete |
 | Local project scaffold and synthetic department documents | Coordinator | Complete; tests/build pass |
-| API authorization, document access, and ingestion | Coordinator | Planned |
+| API authorization and document access | Coordinator | Complete; 7 backend tests pass |
+| Ingestion, retrieval, and chat | Coordinator | Planned |
 | Grounded chat, PII guardrails, citations, and provider adapters | Coordinator | Planned |
 | Responsive Cognito UI and account switching | Coordinator | Planned |
 | Local verification, setup/deployment docs, and review | Coordinator | Planned |
@@ -28,7 +29,7 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 - AWS Cognito documentation confirms managed login accepts username/password and `prompt=login` requests re-authentication: [authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html).
 - Reference images are checked in under `docs/design/reference/`.
 - `web/`: `npm test` passes (1 test); `npm run build` passes with TypeScript checking.
-- `api/`: `python3 -m pytest -q` passes (1 test) using Python 3.14 and pytest installed under `/tmp/knowledgellm-test-deps`; local Python 3.12.3 lacks both pip and venv modules, so direct 3.12 test setup did not work.
+- `api/`: `python3 -m pytest -q` passes (7 tests) using Python 3.14 and pytest installed under `/tmp/knowledgellm-test-deps`; local Python 3.12.3 lacks both pip and venv modules, so direct 3.12 test setup did not work.
 - No cloud deployment has been authorized.
 
 ## Unresolved Issues
@@ -38,4 +39,4 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 
 ## Next Action
 
-Implement API authorization in `docs/superpowers/plans/2026-10-06-knowledgellm-full-stack-prototype.md` Task 2, then complete retrieval/chat and the UI.
+Implement ingestion, retrieval, guardrails, and chat in Task 3 while frontend implementation proceeds independently.

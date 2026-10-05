@@ -21,6 +21,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Groq API key; supply through deployment configuration
+  WebOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Exact browser origin allowed to call the API
 
 Globals:
   Function:
@@ -29,6 +33,7 @@ Globals:
     MemorySize: 512
     Environment:
       Variables:
+        PYTHONPATH: /var/task/src
         DOCUMENTS_BUCKET: !Ref DocumentsBucket
         QDRANT_URL: !Ref QdrantUrl
         QDRANT_API_KEY: !Ref QdrantApiKey
@@ -53,6 +58,16 @@ Resources:
   KnowledgeApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref WebOrigin
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
       Auth:
         Authorizers:
           CognitoJwt:
@@ -65,12 +80,18 @@ Resources:
   KnowledgeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: api/src/
+      CodeUri: api/
       Handler: knowledgellm.handler.handler
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref DocumentsBucket
       Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref KnowledgeApi
+            Path: /health
+            Method: GET
         ListDocuments:
           Type: HttpApi
           Properties:
@@ -99,7 +120,7 @@ Resources:
   IngestionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: api/src/
+      CodeUri: api/
       Handler: knowledgellm.ingest.handler
       Timeout: 120
       MemorySize: 1024

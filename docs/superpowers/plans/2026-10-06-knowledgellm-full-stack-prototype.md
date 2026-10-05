@@ -51,7 +51,7 @@
 - [x] Scaffold typed web and Python 3.12 packages, sample Markdown and SAM resources without AWS credentials.
 - [x] Run web tests/build and backend tests; confirm they pass locally.
 - [x] Update `AGENTS.md` commands and established module paths.
-- [ ] Commit as `feat: scaffold KnowledgeLLM prototype`.
+- [x] Commit as `feat: scaffold KnowledgeLLM prototype` (`cf5efc0`).
 
 ### Task 2: Department Authorization and Document API
 
@@ -66,11 +66,11 @@
 - `open_document(document_id: str, departments: frozenset[str], storage: DocumentStorage) -> DocumentLink` authorizes before generating a short-lived URL.
 - `handler(event: dict[str, object], context: object) -> dict[str, object]` serves `GET /documents`, `GET /documents/{id}`, and health status from API Gateway v2 events.
 
-- [ ] Write tests for valid, absent, malformed, and unknown group claims; forged request `department` values; cross-group IDs; private-link TTL.
-- [ ] Run focused pytest and confirm failure.
-- [ ] Implement allowlisted group mapping, S3 key mapping, and authorization-before-storage access.
-- [ ] Configure API Gateway JWT authorizer with Cognito issuer/audience parameters; avoid public document routes.
-- [ ] Run `python -m pytest`; confirm unauthorized paths never call storage.
+- [x] Write tests for valid, absent, malformed, and unknown group claims; forged request `department` values; cross-group IDs; private-link TTL.
+- [x] Run focused pytest and confirm failure.
+- [x] Implement allowlisted group mapping, S3 key mapping, and authorization-before-storage access.
+- [x] Configure API Gateway JWT authorizer with Cognito issuer/audience parameters; avoid public document routes.
+- [x] Run `python -m pytest`; confirm unauthorized paths never call storage (7 tests pass).
 - [ ] Commit as `feat: enforce department scoped document access`.
 
 ### Task 3: Ingestion, Retrieval, Guardrails, and Cited Chat
