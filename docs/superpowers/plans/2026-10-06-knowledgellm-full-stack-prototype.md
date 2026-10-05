@@ -71,7 +71,7 @@
 - [x] Implement allowlisted group mapping, S3 key mapping, and authorization-before-storage access.
 - [x] Configure API Gateway JWT authorizer with Cognito issuer/audience parameters; avoid public document routes.
 - [x] Run `python -m pytest`; confirm unauthorized paths never call storage (7 tests pass).
-- [ ] Commit as `feat: enforce department scoped document access`.
+- [x] Commit as `feat: enforce department scoped document access` (`acdade7`).
 
 ### Task 3: Ingestion, Retrieval, Guardrails, and Cited Chat
 
@@ -86,12 +86,14 @@
 - `answer_question(question: str, departments: frozenset[str], retriever: Retriever, generator: Generator, guardrails: Guardrails) -> ChatAnswer` returns grounded text, citations, and optional usage/cost metadata.
 - `ingest_s3_object(event: Mapping[str, object], storage: DocumentStorage, index: VectorIndex, embedder: Embedder) -> int` chunks and indexes Markdown with immutable department/source metadata.
 
-- [ ] Write tests proving index metadata derives from trusted S3 key mappings, query uses exact allowlisted department filters, unauthorized chunks never reach generation, unsupported questions return no uncited facts, PII fails closed, and provider errors do not leak input.
-- [ ] Run focused pytest and confirm failure.
-- [ ] Implement pure policy/guardrail logic and injected FastEmbed/Qdrant/Groq/S3 adapters.
-- [ ] Return only citations for chunks actually included in authorized context. Report cost only when usage and configured rates are present.
-- [ ] Run all backend tests, including empty/no-source and timeout cases.
-- [ ] Commit as `feat: add guarded retrieval and cited answers`.
+- [x] Write tests proving index metadata derives from trusted S3 key mappings, query uses exact allowlisted department filters, unauthorized chunks never reach generation, unsupported questions return no uncited facts, PII fails closed, and provider errors do not leak input.
+- [x] Run focused pytest and confirm failure.
+- [x] Implement pure policy/guardrail logic and injected FastEmbed/Qdrant/Groq/S3 adapters.
+- [x] Return only citations for chunks actually included in authorized context. Report cost only when usage and configured rates are present.
+- [x] Run all backend tests, including empty/no-source and timeout cases (28 pass).
+- [x] Commit as `feat: add guarded retrieval and cited answers` (`09169a8`).
+
+Ruling: Qdrant document IDs are opaque single path segments while S3 keys retain department paths; this avoids encoded-slash routing ambiguity in API Gateway. S3 ingestion uses EventBridge notifications instead of an S3 Lambda notification to avoid a same-template bucket/function dependency cycle.
 
 ### Task 4: Cognito Flow and Screenshot-Led Responsive UI
 
@@ -106,24 +108,24 @@
 - `loadDocuments(accessToken: string): Promise<DocumentSummary[]>`; `askQuestion(accessToken: string, question: string): Promise<ChatAnswer>`.
 - Department identity is rendered from verified API response/token claims; identity cards initiate sign-in and never mutate department state.
 
-- [ ] Test login redirect configuration, switch clearing state and requiring fresh login, authorized-folder visibility, citation interactions, loading/error/empty states, and keyboard controls.
-- [ ] Confirm tests fail, then implement the screenshot-led layout, provided color tokens, responsive styles, accessible icon labels, and API-backed chat/doc browsing.
-- [ ] At 390px show scrollable identity cards and stacked monitor; at desktop show left folder sidebar and centered conversation. Never show unauthorized document titles/counts.
-- [ ] Run `npm test` and `npm run build` in `web/`; confirm pass.
-- [ ] Commit as `feat: build responsive cognito knowledge interface`.
+- [x] Test login redirect configuration, switch clearing state and requiring fresh login, authorized-folder visibility, citation interactions, loading/error/empty states, and keyboard controls.
+- [x] Confirm tests fail, then implement the screenshot-led layout, provided color tokens, responsive styles, accessible icon labels, and API-backed chat/doc browsing.
+- [x] At 390px show scrollable identity cards and stacked monitor; at desktop show left folder sidebar and centered conversation. Never show unauthorized document titles/counts.
+- [x] Run `npm test` (15 tests) and `npm run build` in `web/`; confirm pass.
+- [x] Commit as `feat: build responsive cognito knowledge interface` (`0287266`).
 
 ### Task 5: Setup, Deployment Guidance, and End-to-End Local Verification
 
 **Files:**
-- Create: `README.md`, `api/tests/test_acceptance.py`, `web/src/app/acceptance.test.tsx`
+- Create: `README.md`, `api/tests/test_acceptance.py`
 - Create or modify: `docs/product-development.md`, `docs/superpowers/plans/2026-10-06-knowledgellm-full-stack-prototype.md`, `.gitignore`, `.env.example`, `template.yaml`
 
 **Interfaces:**
 - Document required environment variables, local mock/test commands, Cognito app-client configuration, S3/Qdrant/Groq setup, and SAM deployment commands. No secrets appear in examples.
 - Provide a demo fixture mode for local tests only; it cannot be enabled in production builds or substitute for Cognito claims in deployment.
 
-- [ ] Add acceptance tests for Alex/Finance, Sam/Operations, Priya/People; cross-department access denial; cited Q4 budget answer; sign-out/switch; and narrow layout.
-- [ ] Run full web/backend verification and record exact results; run SAM template validation if SAM is installed.
-- [ ] Audit dependencies/config for secret placeholders, public S3 access, or demo identity authorization paths.
-- [ ] Update product status, unresolved configuration requirements, commands, evidence, and next action.
-- [ ] Commit as `docs: document local setup and prototype deployment`.
+- [x] Add acceptance coverage for Alex/Finance, Sam/Operations, and Priya/People, forged department denial, cited Q4 chat, account switching, and narrow layout (`api/tests/test_acceptance.py`, `web/src/app/Workspace.test.tsx`).
+- [x] Run full web/backend verification and record exact results; `cfn-lint template.yaml` passes. `sam validate` is unavailable because AWS SAM CLI is not installed.
+- [x] Audit configuration: examples contain blank credentials, S3 public access is blocked, and no demo identity grants access.
+- [x] Update product status, unresolved configuration requirements, commands, evidence, and next action.
+- [x] Commit as `docs: document local setup and prototype deployment`.

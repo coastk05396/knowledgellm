@@ -18,18 +18,19 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 | --- | --- | --- |
 | Product/design specification and acceptance criteria | Coordinator | Complete |
 | Local project scaffold and synthetic department documents | Coordinator | Complete; tests/build pass |
-| API authorization and document access | Coordinator | Complete; 7 backend tests pass |
-| Ingestion, retrieval, and chat | Coordinator | Planned |
-| Grounded chat, PII guardrails, citations, and provider adapters | Coordinator | Planned |
-| Responsive Cognito UI and account switching | Coordinator | Planned |
-| Local verification, setup/deployment docs, and review | Coordinator | Planned |
+| API authorization and document access | Coordinator | Complete; covered by full backend suite |
+| Ingestion, retrieval, guardrails, and cited chat | Coordinator | Complete; covered by full backend suite |
+| Responsive Cognito UI and account switching | Frontend worker | Complete; 15 frontend tests/build/browser checks pass |
+| Cognito/SAM setup docs, acceptance checks, and review | Coordinator | Complete locally; PR blocked because origin has no branches or default `main` |
 
 ## Verification Evidence
 
 - AWS Cognito documentation confirms managed login accepts username/password and `prompt=login` requests re-authentication: [authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html).
 - Reference images are checked in under `docs/design/reference/`.
-- `web/`: `npm test` passes (1 test); `npm run build` passes with TypeScript checking.
-- `api/`: `python3 -m pytest -q` passes (7 tests) using Python 3.14 and pytest installed under `/tmp/knowledgellm-test-deps`; local Python 3.12.3 lacks both pip and venv modules, so direct 3.12 test setup did not work.
+- `web/`: `npm ci` reports zero vulnerabilities; `npm test` passes (15 tests); `npm run build` passes with TypeScript checking; source formatting check passes. Temporary Chromium screenshots at 390px and 1440px show no horizontal overflow; account switching, keyboard folder controls, cited answers, and New chat were exercised.
+- `api/`: `PYTHONPATH=api/src python3 -m pytest -q api/tests` passes (33 tests) using Python 3.14 and pytest isolated under `/tmp/knowledgellm-test-deps`; local Python 3.12.3 lacks `pip` and `venv`, so direct Python 3.12 test setup did not work. `compileall` passes.
+- `template.yaml`: `cfn-lint template.yaml` passes. `sam validate` is not run because AWS SAM CLI is not installed in the environment.
+- `web/`: Prettier check passes; `npm audit --audit-level=moderate` reports zero vulnerabilities.
 - No cloud deployment has been authorized.
 
 ## Unresolved Issues
@@ -39,4 +40,4 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 
 ## Next Action
 
-Implement ingestion, retrieval, guardrails, and chat in Task 3 while frontend implementation proceeds independently.
+Local implementation and review are complete. Open a PR after the remote repository has a real `main` branch. SAM build/deployment and Cognito login require configured AWS resources and were not run.
