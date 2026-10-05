@@ -22,7 +22,7 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 | Ingestion, retrieval, guardrails, and cited chat | Coordinator | Complete; covered by full backend suite |
 | Responsive Cognito UI and account switching | Frontend worker | Complete locally; 18 frontend tests and production build pass |
 | Post-review auth, retrieval, and citation hardening | Coordinator | Complete locally; backend suite and SAM validation/build pass |
-| Cognito/SAM setup docs, acceptance checks, and review | Coordinator | Complete locally; feature branch is ready for a PR against `main` |
+| Cognito/SAM setup docs, acceptance checks, and review | Coordinator | Complete locally; submitted as [PR #1](https://github.com/coastk05396/knowledgellm/pull/1) |
 
 ## Verification Evidence
 
@@ -41,4 +41,4 @@ Build a responsive KnowledgeLLM prototype from the supplied desktop and mobile r
 
 ## Next Action
 
-Local implementation and review are complete, and the local baseline has been published as `main` so the implementation branch can be reviewed. SAM packaging validation passed, but deployment and live Cognito sign-in require configured AWS resources and were not run.
+Local implementation and review are complete in [PR #1](https://github.com/coastk05396/knowledgellm/pull/1). SAM packaging validation passed, but deployment and live Cognito sign-in require configured AWS resources and were not run.

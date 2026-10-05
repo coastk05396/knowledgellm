@@ -142,4 +142,4 @@ Ruling: Qdrant document IDs are opaque single path segments while S3 keys retain
 - [x] Refine identity/status/citation UI to match desktop and mobile references while keeping unauthorized document metadata hidden.
 - [x] Confirm regression tests fail before fixes and pass after: web 18 tests; API 37 tests.
 - [x] Verify frontend production build, Prettier, npm audit, SAM lint validation, and SAM build.
-- [ ] Push the signed feature branch and open a PR against the newly published `main` baseline.
+- [x] Push the signed feature branch and open [PR #1](https://github.com/coastk05396/knowledgellm/pull/1) against the published `main` baseline.
