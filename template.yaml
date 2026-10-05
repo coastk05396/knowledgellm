@@ -3,24 +3,41 @@ Transform: AWS::Serverless-2016-10-31
 Description: KnowledgeLLM permission-aware knowledge assistant prototype
 
 Parameters:
-  CognitoIssuer:
+  CognitoDomainPrefix:
     Type: String
-    Description: Cognito user pool issuer URL
-  CognitoAudience:
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Globally unique prefix for the managed Cognito login domain
+  WebCallbackUrl:
     Type: String
-    Description: Cognito app client ID
+    Default: http://localhost:5173/
+    Description: Exact OAuth callback URI registered in the web app client
+  WebLogoutUrl:
+    Type: String
+    Default: http://localhost:5173/
+    Description: Exact post-logout URI registered in the web app client
   QdrantUrl:
     Type: String
-    NoEcho: true
-    Description: Qdrant cluster URL; supply through deployment configuration
-  QdrantApiKey:
+    Description: Qdrant cluster URL
+  QdrantApiKeySecretArn:
     Type: String
-    NoEcho: true
-    Description: Qdrant API key; supply through deployment configuration
-  GroqApiKey:
+    Description: ARN of the Qdrant API key stored in Secrets Manager
+  GroqApiKeySecretArn:
     Type: String
-    NoEcho: true
-    Description: Groq API key; supply through deployment configuration
+    Description: ARN of the Groq API key stored in Secrets Manager
+  GroqModel:
+    Type: String
+    Default: openai/gpt-oss-20b
+    Description: Configured Groq model ID; check current model availability before deployment
+  GroqInputRatePerMillionUsd:
+    Type: String
+    Default: ''
+    Description: Current configured input token price per million USD; blank hides cost estimates
+  GroqOutputRatePerMillionUsd:
+    Type: String
+    Default: ''
+    Description: Current configured output token price per million USD; blank hides cost estimates
   WebOrigin:
     Type: String
     Default: http://localhost:5173
@@ -36,10 +53,82 @@ Globals:
         PYTHONPATH: /var/task/src
         DOCUMENTS_BUCKET: !Ref DocumentsBucket
         QDRANT_URL: !Ref QdrantUrl
-        QDRANT_API_KEY: !Ref QdrantApiKey
-        GROQ_API_KEY: !Ref GroqApiKey
+        QDRANT_API_KEY_SECRET_ARN: !Ref QdrantApiKeySecretArn
+        QDRANT_COLLECTION: knowledgellm
+        EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+        GROQ_API_KEY_SECRET_ARN: !Ref GroqApiKeySecretArn
+        GROQ_MODEL: !Ref GroqModel
+        GROQ_INPUT_RATE_PER_MILLION_USD: !Ref GroqInputRatePerMillionUsd
+        GROQ_OUTPUT_RATE_PER_MILLION_USD: !Ref GroqOutputRatePerMillionUsd
 
 Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-users'
+      UsernameConfiguration:
+        CaseSensitive: false
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+          TemporaryPasswordValidityDays: 7
+
+  FinanceGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: finance
+      UserPoolId: !Ref CognitoUserPool
+
+  OperationsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: operations
+      UserPoolId: !Ref CognitoUserPool
+
+  PeopleGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: people
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: KnowledgeLLM web
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - profile
+        - email
+      CallbackURLs:
+        - !Ref WebCallbackUrl
+      LogoutURLs:
+        - !Ref WebLogoutUrl
+      SupportedIdentityProviders:
+        - COGNITO
+
+  CognitoDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref CognitoUserPool
+      ManagedLoginVersion: 2
+
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -54,6 +143,9 @@ Resources:
               SSEAlgorithm: AES256
       VersioningConfiguration:
         Status: Enabled
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
 
   KnowledgeApi:
     Type: AWS::Serverless::HttpApi
@@ -73,18 +165,26 @@ Resources:
           CognitoJwt:
             IdentitySource: '$request.header.Authorization'
             JwtConfiguration:
-              issuer: !Ref CognitoIssuer
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${CognitoUserPool}'
               audience:
-                - !Ref CognitoAudience
+                - !Ref CognitoUserPoolClient
 
   KnowledgeFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: api/
       Handler: knowledgellm.handler.handler
+      Timeout: 28
+      MemorySize: 1024
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref DocumentsBucket
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource:
+                - !Ref QdrantApiKeySecretArn
+                - !Ref GroqApiKeySecretArn
       Events:
         Health:
           Type: HttpApi
@@ -122,13 +222,38 @@ Resources:
     Properties:
       CodeUri: api/
       Handler: knowledgellm.ingest.handler
-      Timeout: 120
-      MemorySize: 1024
+      Timeout: 180
+      MemorySize: 2048
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref DocumentsBucket
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref QdrantApiKeySecretArn
+      Events:
+        ObjectCreated:
+          Type: EventBridge
+          Properties:
+            Pattern:
+              source:
+                - aws.s3
+              detail-type:
+                - Object Created
+              detail:
+                bucket:
+                  name:
+                    - !Ref DocumentsBucket
 
 Outputs:
+  CognitoUserPoolId:
+    Value: !Ref CognitoUserPool
+  CognitoIssuer:
+    Value: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${CognitoUserPool}'
+  CognitoClientId:
+    Value: !Ref CognitoUserPoolClient
+  CognitoDomainUrl:
+    Value: !Sub 'https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com'
   ApiUrl:
     Value: !Sub 'https://${KnowledgeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
   DocumentsBucketName:
