@@ -107,3 +107,77 @@ def test_eventbridge_s3_event_is_normalized_to_an_object_record() -> None:
             }
         }
     ]
+
+
+def test_versioned_ingestion_reads_immutable_source_and_never_replaces() -> None:
+    class Storage:
+        def read_document(self, key, version_id=None):
+            assert version_id == "older-event-version"
+            return "finance policy " * 100
+
+    class Index:
+        def upsert_version(self, document_id, records):
+            assert document_id == "finance-expense-policy"
+            assert all(record["source_version_id"] == "older-event-version" for record in records)
+            assert all(len(record["text"].encode()) <= 480 for record in records)
+
+    class Versions:
+        completed = None
+        def complete(self, document_id, version, count):
+            self.completed = (document_id, version, count)
+
+    versions = Versions()
+    count = ingest_s3_object(
+        {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": "older-event-version"}}}]},
+        Storage(), Index(), FakeEmbedder(), versions=versions,
+    )
+    assert count > 1
+    assert versions.completed == ("finance-expense-policy", "older-event-version", count)
+
+
+def test_failed_version_index_never_publishes_completion() -> None:
+    class Storage:
+        def read_document(self, key, version_id=None):
+            return "policy"
+
+    class Index:
+        def upsert_version(self, document_id, records):
+            raise RuntimeError("vector service unavailable")
+
+    class Versions:
+        def complete(self, *args):
+            pytest.fail("failed indexing cannot publish a completion manifest")
+
+    with pytest.raises(RuntimeError, match="vector service"):
+        ingest_s3_object(
+            {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": "v1"}}}]},
+            Storage(), Index(), FakeEmbedder(), versions=Versions(),
+        )
+
+
+def test_version_specific_point_ids_are_stable_and_cannot_overwrite_newer_versions() -> None:
+    class Storage:
+        def read_document(self, key, version_id=None):
+            return "policy"
+
+    class Index:
+        ids = []
+        def upsert_version(self, document_id, records):
+            self.ids.append(records[0]["id"])
+
+    index = Index()
+    for version in ("new", "old", "new"):
+        ingest_s3_object(
+            {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": version}}}]},
+            Storage(), index, FakeEmbedder(),
+        )
+    assert index.ids[0] == index.ids[2]
+    assert index.ids[0] != index.ids[1]
+
+
+def test_eventbridge_preserves_immutable_version_id() -> None:
+    record = normalize_s3_event({
+        "source": "aws.s3", "detail-type": "Object Created",
+        "detail": {"bucket": {"name": "bucket"}, "object": {"key": "finance/expense-policy.md", "version-id": "version1"}},
+    })[0]
+    assert record["s3"]["object"]["versionId"] == "version1"

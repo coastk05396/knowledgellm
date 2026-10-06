@@ -57,10 +57,43 @@ def test_s3_document_read_rejects_oversized_sources_before_streaming(monkeypatch
         def get_object(self, **_kwargs):
             return {"ContentLength": MAX_DOCUMENT_BYTES + 1, "Body": body}
 
-    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=lambda _name: Client()))
+    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=lambda _name, **_kwargs: Client()))
     storage = S3DocumentStorage("private-bucket")
 
     with pytest.raises(ValueError):
         storage.read_document("finance/q4-budget-overview.md")
 
     assert not body.called
+
+
+def test_versioned_document_read_uses_exact_version_and_closes_body():
+    import io
+    from knowledgellm.documents import S3DocumentStorage
+
+    body = io.BytesIO(b"immutable policy")
+    class Client:
+        def get_object(self, **kwargs):
+            assert kwargs == {"Bucket": "bucket", "Key": "finance/expense-policy.md", "VersionId": "v1"}
+            return {"ContentLength": 16, "Body": body}
+    assert S3DocumentStorage("bucket", Client()).read_document("finance/expense-policy.md", "v1") == "immutable policy"
+    assert body.closed
+
+
+def test_s3_verification_connection_has_bounded_timeouts_and_is_reused(monkeypatch):
+    import boto3
+    from knowledgellm.documents import s3_client
+
+    calls = []
+    def create_client(service, **kwargs):
+        calls.append((service, kwargs))
+        return object()
+    monkeypatch.setattr(boto3, "client", create_client)
+    s3_client.cache_clear()
+    try:
+        assert s3_client() is s3_client()
+        config = calls[0][1]["config"]
+        assert config.connect_timeout == 2
+        assert config.read_timeout == 3
+        assert config.retries["total_max_attempts"] == 1
+    finally:
+        s3_client.cache_clear()

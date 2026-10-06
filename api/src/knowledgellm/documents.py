@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
+from functools import lru_cache
 
 MAX_DOCUMENT_BYTES = 1_000_000
 
@@ -22,7 +23,9 @@ class DocumentLink:
 class DocumentStorage(Protocol):
     def presigned_get_url(self, key: str, expires_in: int) -> str: ...
 
-    def read_document(self, key: str) -> str: ...
+    def read_document(self, key: str, version_id: str | None = None) -> str: ...
+
+    def current_version(self, key: str) -> str: ...
 
 
 class AuthorizationError(Exception):
@@ -83,12 +86,25 @@ def open_document(
     return DocumentLink(id=doc_id, title=title, url=url)
 
 
-class S3DocumentStorage:
-    def __init__(self, bucket: str) -> None:
-        import boto3
+def source_key_for_id(document_id: str) -> str:
+    return next(entry[3] for entry in _CATALOG if entry[0] == document_id)
 
+
+@lru_cache(maxsize=1)
+def s3_client() -> Any:
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client("s3", config=Config(
+        connect_timeout=2, read_timeout=3,
+        retries={"total_max_attempts": 1, "mode": "standard"},
+    ))
+
+
+class S3DocumentStorage:
+    def __init__(self, bucket: str, client: Any = None) -> None:
         self._bucket = bucket
-        self._client = boto3.client("s3")
+        self._client = client if client is not None else s3_client()
 
     def presigned_get_url(self, key: str, expires_in: int) -> str:
         return self._client.generate_presigned_url(
@@ -97,8 +113,17 @@ class S3DocumentStorage:
             ExpiresIn=expires_in,
         )
 
-    def read_document(self, key: str) -> str:
-        response = self._client.get_object(Bucket=self._bucket, Key=key)
+    def current_version(self, key: str) -> str:
+        version = self._client.head_object(Bucket=self._bucket, Key=key).get("VersionId")
+        if not isinstance(version, str) or not version or version == "null":
+            raise ValueError("document must have an immutable S3 version")
+        return version
+
+    def read_document(self, key: str, version_id: str | None = None) -> str:
+        params = {"Bucket": self._bucket, "Key": key}
+        if version_id is not None:
+            params["VersionId"] = version_id
+        response = self._client.get_object(**params)
         size = response.get("ContentLength")
         body = response["Body"]
         if not isinstance(size, int) or size > MAX_DOCUMENT_BYTES:

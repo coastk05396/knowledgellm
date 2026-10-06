@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from functools import lru_cache
 from typing import Any, Protocol
 
+from knowledgellm.request_budget import require_time
+
 
 class SecretsClient(Protocol):
     def get_secret_value(self, SecretId: str) -> Mapping[str, str]: ...
@@ -20,9 +22,14 @@ def _is_ssm(identifier: str) -> bool:
 @lru_cache(maxsize=16)
 def _aws_secret(identifier: str) -> str:
     import boto3
+    from botocore.config import Config
+
+    require_time(6)
+    config = Config(connect_timeout=2, read_timeout=3,
+                    retries={"total_max_attempts": 1, "mode": "standard"})
 
     if _is_ssm(identifier):
-        client = boto3.client("ssm")
+        client = boto3.client("ssm", config=config)
         response = client.get_parameter(Name=identifier, WithDecryption=True)
         param = response.get("Parameter", {})
         value = param.get("Value")
@@ -30,7 +37,7 @@ def _aws_secret(identifier: str) -> str:
             raise RuntimeError("configured provider SSM parameter is empty or invalid")
         return value
 
-    return _secret_string(boto3.client("secretsmanager"), identifier)
+    return _secret_string(boto3.client("secretsmanager", config=config), identifier)
 
 
 def _secret_string(client: SecretsClient, secret_arn: str) -> str:

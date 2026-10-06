@@ -49,3 +49,8 @@ output "qdrant_api_key_ssm_parameter_name" {
   value       = length(aws_ssm_parameter.qdrant_api_key) > 0 ? aws_ssm_parameter.qdrant_api_key[0].name : var.qdrant_api_key_secret_arn
   sensitive   = true
 }
+
+output "answer_cache_table_name" {
+  description = "Shared DynamoDB demo-answer cache with 24-hour item expiry."
+  value       = aws_dynamodb_table.answer_cache.name
+}
