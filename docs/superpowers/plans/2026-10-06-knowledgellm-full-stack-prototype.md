@@ -234,3 +234,15 @@ The earlier pending cache deployment is now completed. Direct invocation verifie
 This frontend change builds on PR #5 and does not modify AWS infrastructure.
 
 Previews: [desktop](../../design/verification/2026-10-06-question-shortcuts-desktop.png) and [mobile](../../design/verification/2026-10-06-question-shortcuts-mobile.png). Formatting checks pass for the changed frontend files.
+
+### PII guardrail monitor integration
+
+- [x] Return the existing backend `guardrail_action` in `/chat` responses; no questions, answers, or matched PII are added to telemetry.
+- [x] Validate known status values in the frontend and display question/output blocking, source masking, and passed checks in the monitor. Missing/unknown results show Result unavailable; pending and failed requests have explicit states.
+- [x] Reset the last outcome on account switching/New chat. Existing privacy detection remains regex-based for email, phone, and SSN patterns.
+- [x] Frontend TypeScript/Vite build and Lambda package build pass; no tests were added or run for this request.
+- [x] Apply the reviewed package-only Terraform plan in Singapore: 0 added, 3 updated, 0 destroyed. Both Lambda updates completed successfully. No new service or detection dependency was introduced.
+
+This branch builds on PR #6. Manual demo: submit a fictional question containing `demo@example.com`; the expected response refuses personal details and the monitor reads Question PII blocked. Broader entity detection and unrelated-question handling are separate concerns.
+
+PII monitor previews: [desktop](../../design/verification/2026-10-06-guardrail-status-desktop.png) and [mobile](../../design/verification/2026-10-06-guardrail-status-mobile.png), captured in the initial Awaiting question state. End-to-end status scenarios were not rerun for this change.

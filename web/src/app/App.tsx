@@ -31,6 +31,7 @@ export function Workspace({
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
+  const [chatFailed, setChatFailed] = useState(false);
   const [suggestion, setSuggestion] = useState<{ question: string } | null>(
     null,
   );
@@ -40,6 +41,7 @@ export function Workspace({
     setDocuments([]);
     setSuggestion(null);
     setMessages([]);
+    setChatFailed(false);
     setCost(null);
     setError(null);
     if (!session) {
@@ -101,6 +103,7 @@ export function Workspace({
   const send = async (question: string) => {
     if (!session || !documents.length || busy) return false;
     setBusy(true);
+    setChatFailed(false);
     setError(null);
     try {
       const response = await api.askQuestion(session.accessToken, question);
@@ -119,6 +122,7 @@ export function Workspace({
       );
       return true;
     } catch {
+      setChatFailed(true);
       setError(
         "An answer is unavailable right now. Please try your question again.",
       );
@@ -131,6 +135,7 @@ export function Workspace({
     setDocuments([]);
     setSuggestion(null);
     setMessages([]);
+    setChatFailed(false);
     setCost(null);
     setError(null);
     void onSwitch(department);
@@ -159,7 +164,13 @@ export function Workspace({
           loading={loading}
         />
         <div className="desktop-monitor">
-          <SystemMonitor cost={cost} receivedAnswer={messages.length > 0} />
+          <SystemMonitor
+            cost={cost}
+            receivedAnswer={messages.length > 0}
+            guardrailAction={messages.at(-1)?.response.guardrail_action}
+            busy={busy}
+            failed={chatFailed}
+          />
         </div>
       </aside>
       <main className="chat-area">
@@ -173,6 +184,7 @@ export function Workspace({
           onNew={() => {
             setSuggestion(null);
             setMessages([]);
+            setChatFailed(false);
             setCost(null);
             setError(null);
           }}
@@ -212,7 +224,13 @@ export function Workspace({
           )}
         </div>
         <div className="mobile-monitor">
-          <SystemMonitor cost={cost} receivedAnswer={messages.length > 0} />
+          <SystemMonitor
+            cost={cost}
+            receivedAnswer={messages.length > 0}
+            guardrailAction={messages.at(-1)?.response.guardrail_action}
+            busy={busy}
+            failed={chatFailed}
+          />
         </div>
         <Composer
           onSend={send}

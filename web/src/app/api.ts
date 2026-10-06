@@ -5,11 +5,27 @@ export interface DocumentSummary {
   title: string;
   department: Department;
 }
+export const guardrailActions = [
+  "pass",
+  "question_pii_blocked",
+  "answer_pii_blocked",
+  "source_pii_redacted",
+  "no_sources",
+  "empty_answer",
+  "invalid_citations",
+  "access_denied",
+  "invalid_question",
+] as const;
+export type GuardrailAction = (typeof guardrailActions)[number];
+function isGuardrailAction(value: unknown): value is GuardrailAction {
+  return guardrailActions.some((action) => action === value);
+}
 export interface ChatAnswer {
   answer: string;
   citations: { document_id: string; title: string }[];
   usage?: { total_tokens?: number };
   cost_usd?: number;
+  guardrail_action?: GuardrailAction;
 }
 export interface KnowledgeApi {
   loadDocuments(token: string): Promise<DocumentSummary[]>;
@@ -76,6 +92,9 @@ export const knowledgeApi: KnowledgeApi = {
     return {
       answer: data.answer,
       citations,
+      ...(isGuardrailAction(data.guardrail_action)
+        ? { guardrail_action: data.guardrail_action }
+        : {}),
       ...(typeof data.cost_usd === "number" &&
       Number.isFinite(data.cost_usd) &&
       data.cost_usd >= 0
