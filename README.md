@@ -2,58 +2,132 @@
 
 🔐 KnowledgeLLM is a permission-aware knowledge assistant prototype. Cognito manages username/password sign-in; a Python API applies Cognito group access before listing S3 documents or retrieving Qdrant chunks. Answers cite only approved, retrieved documents. The included content is fictional.
 
-## RAG pipeline
+## System Architecture & Tech Stack
 
-![KnowledgeLLM RAG pipeline: a question passes PII checks, FastEmbed creates a query vector, Qdrant retrieves department-permitted chunks, and Groq generates an answer checked for PII and valid citations. A separate S3 ingestion flow indexes document chunks.](docs/design/architecture/knowledgellm-rag-pipeline.png)
+KnowledgeLLM has two architecture options. **Option A is the current cost-conscious demo**; **Option B is an all-AWS managed reference design**, with service choices driven by operational capabilities rather than free allowances. Option B is not deployed and does not replace the current stack.
 
-1. **Authorize:** Cognito signs in the user; API Gateway validates the JWT. The backend derives Finance, Operations, or People access from verified group claims.
-2. **Retrieve:** reject questions containing recognized PII patterns, embed the question with FastEmbed (`all-MiniLM-L6-v2`), and search Qdrant with department filters. The backend also checks retrieved document IDs against its approved catalog.
-3. **Generate:** mask recognized PII in retrieved text; send system instructions, permitted excerpts, and the question to Groq (`gpt-oss-20b`).
-4. **Return:** block PII in output and accept only citations to approved retrieved sources. Unsupported questions return a no-information response; provider failures return a service error.
-5. **Observe:** return the guardrail outcome and model usage to the UI, and log metadata to CloudWatch without question, answer, or source text. The displayed dollar value is a token-based estimate, not an invoice or the total AWS bill.
+### Option A — Cost-conscious demo
 
-Ingestion runs separately when approved Markdown files are created in S3. It chunks text, attaches department/source metadata, embeds it, and replaces that document's vectors in Qdrant. Query-time embedding and document embedding use the same model. The three chunks in the illustration are examples; retrieval requests up to five matches.
+The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs locally today; Cloudflare Pages with a custom domain is planned. FastEmbed runs on Lambda CPU, Qdrant stores department-tagged vectors, and Groq generates grounded answers. The application owns chunking, access filters, PII patterns, and citation validation.
 
-## Deployment architecture
-
-The AWS backend is deployed in Singapore (`ap-southeast-1`) and managed by Terraform. The current demo uses a local React/Vite frontend; Cloudflare Pages and a custom domain are the planned public frontend deployment.
+![Cost-conscious KnowledgeLLM system architecture, showing AWS authentication and Lambda, external Qdrant and Groq, separate ingestion, and planned Cloudflare hosting.](docs/design/architecture/knowledgellm-rag-pipeline.png)
 
 ```text
-┌───────────────────────────────┐     ┌──────────────────────────────┐
-│ React/Vite browser            │  ⇄  │ Cognito user pool            │
-│ Local now · Pages planned     │     │ Sign-in + department groups  │
-└───────────────────────────────┘     └──────────────────────────────┘
-                │ Question + Cognito access token
-                ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ API Gateway HTTP API · validate JWT                              │
-│ Knowledge Lambda · derive access from cognito:groups             │
-│                                                                  │
-│ Input PII check → FastEmbed query vector                         │
-│                          ↓                                       │
-│ Qdrant search · department filter → permitted chunks             │
-│                          ↓                                       │
-│ Mask source PII → system instructions + chunks + question        │
-│                          ↓                                       │
-│ Groq LLM → output PII check + validate citations → answer        │
-└──────────────────────────────────────────────────────────────────┘
-        │ Provider credentials          │ Safe telemetry
-        ▼                               ▼
-┌─────────────────────────────┐  ┌─────────────────────────────────┐
-│ SSM Parameter Store         │  │ CloudWatch Logs                 │
-│ SecureString · backend only │  │ Tokens · latency · guardrails   │
-└─────────────────────────────┘  │ Model cost estimate · 7 days    │
-                                 └─────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 01  ENTRY · current demo                                                   │
+│                                                                            │
+│ React / Vite browser ⇄ Amazon Cognito (sign-in + groups)                   │
+│ Local frontend now · Cloudflare Pages / custom domain planned              │
+└────────────────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 02  AWS API · Terraform managed                                            │
+│                                                                            │
+│ API Gateway validates JWT → Python 3.12 Lambda                             │
+│ Verified Cognito groups → server-enforced department access                │
+└────────────────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 03  RAG · Lambda orchestrates the request                                  │
+│                                                                            │
+│ Input PII check → FastEmbed query vector (Lambda CPU)                      │
+│ Qdrant Cloud [external] → department-filtered source chunks                │
+│ Mask source PII → grounded prompt → Groq [external] LLM                    │
+│ Output PII + citation checks → answer + sources + guardrail status         │
+└────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────────────────────────────────────────────────────┐
-│ Private S3 Markdown → EventBridge → ingestion Lambda             │
-│ Chunk text + department metadata → FastEmbed → Qdrant vectors    │
-│ Both Lambdas use /tmp for FastEmbed/Hugging Face caches.         │
-│ Authorized source links use short-lived S3 presigned URLs.       │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 04  INGESTION · separate event-driven flow                                 │
+│                                                                            │
+│ Private S3 Markdown → EventBridge → ingestion Lambda                       │
+│ Chunk + department metadata → FastEmbed → Qdrant Cloud vectors             │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 05  OPERATIONS · existing AWS services                                     │
+│                                                                            │
+│ SSM Parameter Store SecureString → backend provider keys                   │
+│ CloudWatch Logs → tokens, latency, guardrail outcome, cost estimates       │
+│ FastEmbed / Hugging Face caches → writable /tmp in each Lambda             │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Pages serves static assets without a Docker container. Keep provider keys in the backend secret store; all `VITE_*` configuration is visible in the browser bundle. Cloudflare's static asset requests are free and unlimited, subject to other platform limits; AWS and external providers have separate charges. See [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and [Cloudflare setup](#cloudflare-pages-setup).
+**Why this design:** reuse provider free allowances, perform embeddings without a paid embedding API, and use event-driven compute with short log retention. [Qdrant offers a prototype free tier](https://qdrant.tech/pricing/); [Groq publishes Free-plan limits](https://console.groq.com/docs/rate-limits). AWS eligibility, quotas, storage, and account usage still affect billing. This is a low-cost target, not a guaranteed $0 deployment. The monitor's dollar value is an estimated inference cost, not a charge or the total AWS bill.
+
+### Option B — All-AWS managed reference
+
+**Proposed only.** Host React on Amplify, authenticate with Cognito, and keep orchestration in Lambda. Replace FastEmbed with Titan Text Embeddings V2, Qdrant with OpenSearch Serverless, and Groq with an Amazon Nova model on Bedrock. Knowledge Bases manages document parsing/chunking and retrieval; Step Functions plus Lambda starts and monitors ingestion jobs. [Amplify hosting](https://aws.amazon.com/amplify/hosting/), [Titan embeddings](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-titan-text-embeddings-v2.html).
+
+![Proposed all-AWS KnowledgeLLM architecture, with Amplify, Cognito, Lambda, Bedrock Knowledge Bases and Guardrails, Titan embeddings, OpenSearch Serverless, and AWS ingestion and operations services.](docs/design/architecture/knowledgellm-all-aws-architecture.png)
+
+```text
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 01  ENTRY · proposed AWS hosting                                           │
+│                                                                            │
+│ Route 53 → Amplify Hosting (React frontend + managed HTTPS)                │
+│ Browser ⇄ Cognito (sign-in + department groups)                            │
+└────────────────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 02  API & AUTHORIZATION                                                    │
+│                                                                            │
+│ API Gateway validates JWT → Lambda (RBAC + RAG orchestration)              │
+│ Lambda constructs department filters from verified Cognito groups          │
+└────────────────────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 03  MANAGED RAG · all service calls stay on AWS                            │
+│                                                                            │
+│ Bedrock Guardrails: input check                                            │
+│ Knowledge Bases Retrieve → Titan query embedding → OpenSearch              │
+│ Department-filtered chunks → explicit ApplyGuardrail source masking        │
+│ Grounded prompt → Bedrock Nova Pro → output Guardrails                     │
+│ Lambda validates source citations → answer + sources                       │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 04  INGESTION · proposed AWS orchestration                                 │
+│                                                                            │
+│ Private S3 files + metadata → EventBridge → Step Functions + Lambda        │
+│ Start / monitor Knowledge Bases ingestion → parse + chunk                  │
+│ Titan Text Embeddings V2 → OpenSearch Serverless vector index              │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 05  SECURITY & OPERATIONS                                                  │
+│                                                                            │
+│ IAM roles + enforced guardrails · KMS encryption                           │
+│ CloudWatch metrics / logs · X-Ray traces · CloudTrail audit events         │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Access and privacy:** Lambda derives the retrieval filter from verified Cognito groups; callers cannot choose their own department permissions. Use `Retrieve` for controlled source processing, apply Guardrails explicitly to input and retrieved excerpts, then generate with Bedrock and check output/citations. Configure numbered guardrail versions and enforce inference guardrail use through IAM. Guardrails do not grant document access. [Knowledge Bases metadata filters](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html), [Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html), [IAM enforcement](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-permissions-id.html).
+
+**Cost and readiness:** this design adds managed inference, embeddings, guardrail evaluation, vector capacity/storage, hosting, and orchestration costs. Check region/model availability, quotas, retrieval quality, and a Terraform plan before considering deployment. Nova Pro is an illustrative model choice, not a provisioned model. [Bedrock pricing](https://aws.amazon.com/bedrock/pricing/), [OpenSearch pricing](https://aws.amazon.com/opensearch-service/pricing/).
+
+### Tech stack comparison
+
+| Layer | Option A: current low-cost demo | Option B: proposed all-AWS design |
+| --- | --- | --- |
+| Web client | React, TypeScript, Vite | Same frontend on Amplify Hosting |
+| Public hosting / domain | Cloudflare Pages planned | Amplify, Route 53, managed HTTPS |
+| Identity / API | Cognito, API Gateway HTTP API | Cognito, API Gateway HTTP API |
+| Backend | Python 3.12 Lambda | Lambda orchestration |
+| Document storage | Private S3 | Private S3 + document metadata |
+| Ingestion | EventBridge + Lambda chunking | EventBridge + Step Functions/Lambda + Knowledge Bases |
+| Embeddings | FastEmbed / all-MiniLM-L6-v2 on CPU | Bedrock Titan Text Embeddings V2 |
+| Retrieval | Qdrant Cloud + department filters | Knowledge Bases + OpenSearch Serverless + filters |
+| Generation | Groq / gpt-oss-20b | Bedrock / Amazon Nova Pro (example) |
+| Privacy | Application regex checks / masking | Bedrock Guardrails + application validation |
+| Credentials / encryption | SSM SecureString, IAM, S3 encryption | IAM roles for AWS calls, KMS encryption |
+| Observability | CloudWatch Logs, UI estimates | CloudWatch, X-Ray, CloudTrail |
+| Infrastructure | Terraform under `infra/terraform/` | Terraform required before deployment; not implemented |
+
+Both designs use the same principle: **question → authorized retrieval → permitted context → grounded generation → checked answer with sources**. Ingestion embeds source documents separately, using the same embedding model as retrieval. Unsupported questions return a no-information response; provider failures return a service error.
 
 ## Local development
 
