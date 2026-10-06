@@ -37,6 +37,54 @@ export function logoutUrl(config: AppConfig): string {
 export const userManager = authConfigured
   ? new UserManager(createAuthSettings(appConfig))
   : null;
+export const DEMO_ACCOUNTS: Record<string, { username: string; name: string; password: string }> = {
+  finance: { username: "alex", name: "Alex Morgan", password: "Demo123456!@#" },
+  operations: { username: "sam", name: "Sam Patel", password: "Demo123456!@#" },
+  people: { username: "priya", name: "Priya Ray", password: "Demo123456!@#" },
+};
+
+export async function signInAsPersona(department: string): Promise<Session> {
+  const account = DEMO_ACCOUNTS[department];
+  if (!account) throw new Error(`Unknown persona department: ${department}`);
+
+  // Call Cognito directly with USER_PASSWORD_AUTH using the cognito-idp endpoint
+  const regionMatch = appConfig.cognitoIssuer.match(/cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/);
+  const region = regionMatch ? regionMatch[1] : "ap-southeast-1";
+  const cognitoEndpoint = `https://cognito-idp.${region}.amazonaws.com/`;
+
+  const res = await fetch(cognitoEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+    },
+    body: JSON.stringify({
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: appConfig.cognitoClientId,
+      AuthParameters: {
+        USERNAME: account.username,
+        PASSWORD: account.password,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`Cognito authentication failed: ${errorBody}`);
+  }
+
+  const data = await res.json();
+  const token = data.AuthenticationResult?.AccessToken;
+  if (!token) throw new Error("No access token returned from Cognito");
+
+  const session: Session = {
+    accessToken: token,
+    name: account.name,
+  };
+  sessionStorage.setItem("knowledge-direct-session", JSON.stringify(session));
+  return session;
+}
+
 export async function signIn(): Promise<void> {
   if (!userManager) throw new Error("Authentication is not configured.");
   await userManager.signinRedirect({ prompt: "login" });
@@ -47,6 +95,8 @@ export async function switchIdentity(
   if (!userManager) throw new Error("Authentication is not configured.");
   await userManager.removeUser();
   await userManager.clearStaleState();
+  sessionStorage.removeItem("knowledge-direct-session");
   sessionStorage.setItem("knowledge-account-switch", "1");
   redirect(logoutUrl(appConfig));
 }
+

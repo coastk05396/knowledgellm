@@ -94,7 +94,7 @@ resource "aws_cognito_user_pool_client" "web" {
   generate_secret                      = false
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
-  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH"]
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "profile", "email"]

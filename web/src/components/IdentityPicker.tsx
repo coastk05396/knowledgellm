@@ -15,7 +15,7 @@ export function IdentityPicker({
   disabled = false,
 }: {
   departments: Department[];
-  onSwitch: () => void;
+  onSwitch: (department?: Department) => void;
   disabled?: boolean;
 }) {
   return (
@@ -31,7 +31,7 @@ export function IdentityPicker({
             key={person.department}
             className={`identity-card ${person.department} ${departments.includes(person.department) ? "selected" : ""}`}
             type="button"
-            onClick={onSwitch}
+            onClick={() => onSwitch(person.department)}
             disabled={disabled}
             aria-pressed={departments.includes(person.department)}
             aria-label={`Sign in as another account: ${person.name}, ${person.label}`}
