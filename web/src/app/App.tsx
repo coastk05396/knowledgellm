@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogIn, Terminal } from "lucide-react";
+import { Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
@@ -199,23 +199,6 @@ export function Workspace({
             </p>
           )}
           {authLoading && <p role="status">Connecting to your account…</p>}
-          {!session && !authLoading && (
-            <div className="login-notice">
-              <button
-                className="sign-in"
-                onClick={() => switchAccount()}
-                disabled={!authConfigured}
-              >
-                <LogIn size={18} />
-                Sign in
-              </button>
-              <p>
-                {authConfigured
-                  ? "Use your Cognito username and password."
-                  : "Sign-in is not configured yet. Connect Cognito to unlock your workspace."}
-              </p>
-            </div>
-          )}
           {session && !loading && !documents.length && !error && (
             <p role="status">
               Your account has no document access. Contact your workspace
