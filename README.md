@@ -2,6 +2,42 @@
 
 🔐 KnowledgeLLM is a permission-aware knowledge assistant prototype. Cognito manages username/password sign-in; a Python API applies Cognito group access before listing S3 documents or retrieving Qdrant chunks. Answers cite only approved, retrieved documents. The included content is fictional.
 
+## Deployment architecture
+
+Cloudflare Pages hosts the static React/Vite frontend; Terraform manages the AWS backend. This is the planned public deployment layout:
+
+```text
+┌─────────────────────────────┐       ┌─────────────────────────────┐
+│ Cloudflare Pages            │       │ Amazon Cognito              │
+│ React/Vite · custom domain  │       │ Username/password · groups  │
+└──────────────┬──────────────┘       └──────────────┬──────────────┘
+               │ serves UI                         │ login + tokens
+               ▼                                   ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Browser · department workspace · chat · source citations          │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │ HTTPS request + access token
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ AWS API Gateway → JWT validation → Python Lambda                  │
+│ Input guardrail → FastEmbed → department retrieval → Groq         │
+│ Output guardrail → validated citations → response                 │
+└─────┬──────────────┬──────────────┬──────────────┬──────────────────┘
+      │              │              │              │
+      ▼              ▼              ▼              ▼
+┌──────────┐  ┌────────────┐  ┌────────────┐  ┌─────────────────────┐
+│ Qdrant   │  │ Groq API   │  │ CloudWatch │  │ AWS Secrets Manager │
+│ Vectors  │  │ Inference  │  │ Metadata   │  │ Backend API keys    │
+└────▲─────┘  └────────────┘  └────────────┘  └─────────────────────┘
+     │ embedded chunks
+┌────┴─────────────────────────────────────────────────────────────┐
+│ Private S3 documents → EventBridge → ingestion Lambda → FastEmbed │
+│ Approved source files are returned through expiring S3 links.     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Pages serves static assets without a Docker container. Keep provider keys in the backend secret store; all `VITE_*` configuration is visible in the browser bundle. Cloudflare's static asset requests are free and unlimited, subject to other platform limits; AWS and external providers have separate charges. See [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and the Cloudflare deployment checklist in [promt.md](promt.md).
+
 ## Local development
 
 Requirements: Node.js 20.19+ or 22.12+, npm, Python 3.12, and Git. Install the web app and run the local checks:
