@@ -4,8 +4,6 @@
 
 Built with **React / TypeScript / Vite** · **AWS Lambda (Python 3.12)** · **Amazon Cognito** · **Amazon DynamoDB** · **AWS Bedrock (Cohere Multilingual v3)** · **Qdrant Cloud** · **Groq Cloud LLM** · fully provisioned with **Terraform**.
 
-![KnowledgeLLM RAG Pipeline](docs/design/architecture/rag-pipeline.png)
-
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 ║                                          RAG Pipeline                                                   ║
