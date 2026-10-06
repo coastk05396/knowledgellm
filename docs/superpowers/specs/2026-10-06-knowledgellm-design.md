@@ -104,3 +104,7 @@ Minimize demo costs by using eligible service allowances; an indefinite $0 bill 
 ## Department question shortcuts
 
 Replace the chat identity heading, explanatory paragraph, and department/permission badges with five document-based question buttons for the authorized department. Clicking a button fills and focuses the composer without sending. Suggestions change with department access; switching accounts or starting a new chat clears the selected draft.
+
+## Visible PII guardrail outcomes
+
+The system monitor must display the last backend-reported guardrail outcome rather than a generic completed-response label. Show question/output blocking and source masking explicitly. Pending requests show Checking; failed requests show Check unavailable. Missing or unknown backend status must not imply a passed check. Existing regex coverage remains limited to common email, phone, and SSN patterns.

@@ -136,6 +136,7 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
                 ],
                 "usage": usage,
                 "cost_usd": cost,
+                "guardrail_action": result.guardrail_action,
             },
         )
 
