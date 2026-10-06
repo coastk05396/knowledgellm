@@ -1,8 +1,12 @@
 # KnowledgeLLM Design Spec
 
-**Status:** Draft for user review
+**Status:** Approved for implementation
 **Date:** 2026-10-06
 **Source brief:** [Project1 Google Doc](https://docs.google.com/document/d/1RDI7CdBDm-hXj6-bgaUyz03ZATXSiehVcGkjfa0oIVk/edit) and the two supplied desktop/mobile UI references.
+
+**UI references:** [Mobile](../../design/reference/knowledgellm-mobile.png) and [desktop](../../design/reference/knowledgellm-desktop.png).
+
+**Document ownership:** This is the current product requirements and design source. Track execution in the [implementation plan](../plans/2026-10-06-knowledgellm-full-stack-prototype.md); use [README](../../../README.md) for setup instructions.
 
 ## Goal
 
@@ -12,7 +16,14 @@ Build a permission-aware knowledge assistant that lets authenticated department 
 
 The product has three initial departments and representative identities matching the visual brief: Alex / Finance, Sam / Operations, and Priya / People. A user signs in with Amazon Cognito username and password. The app shows the authenticated identity, lists only authorized department folders and documents, and lets the user open a document or ask a question. Answers include citations that open the source document. Choosing a different identity starts sign-out and a new Cognito sign-in; the interface never changes the active role by changing client-side state alone.
 
-The desktop layout uses a department/document sidebar and a focused chat panel. Mobile places identity selection and expandable department folders above the chat. Use a graphite terminal-inspired theme with warm amber as the primary accent and restrained department colors. Keep chat text highly readable, and label access, PII, and estimated-token-cost status clearly.
+### UI contract from the supplied references
+
+- **Desktop:** top brand bar with identity/account controls; a left department sidebar with a monitor panel anchored low; a main conversation area with a section header, identity introduction, flat user/assistant messages, citation chips, and a bottom composer with an access caption.
+- **Mobile:** compact brand header; three identity cards; department accordions; conversation; a two-column guardrail/cost panel; and the composer with safe-area spacing. Stack the monitor at narrow widths and allow identity cards to scroll horizontally rather than compressing their labels.
+- **Palette:** graphite canvas `#202326`, surfaces `#25292D` and `#292E35`, slate borders `#48535F`, primary text `#EDF0F3`, muted text `#ADB8C6`, Finance coral `#ED9678`, Operations cyan `#62B7C3`, People violet `#B79BDE`, gold `#E3BE73`, and success green `#39BD7B`. Treat these as visual-reference estimates.
+- **Type and controls:** IBM Plex Sans for body copy and IBM Plex Mono for compact labels/status; flat messages, thin dividers, restrained shadows, 8–12px control radii, and circle avatars. Provide keyboard focus, descriptive icon labels, reduced motion, and at least 44px touch targets.
+- **Security adaptation:** preserve the department shells and accents, but show document names/counts only after authorization. The screenshots reveal multiple groups' file names while Finance is active; the implementation must not reproduce that disclosure.
+- **Account switch:** identity cards are sign-out/sign-in entry points, not role selectors. Starting a switch clears the current app session and chat view, signs out through Cognito, and then asks for the next user's username/password.
 
 ## Scope
 
@@ -26,6 +37,7 @@ The desktop layout uses a department/document sidebar and a focused chat panel. 
 - Server-side PII checks/redaction and safe handling of out-of-scope questions.
 - Basic chat history for the active session, a new-chat action, and visible per-chat token/cost estimates when provider usage data is available.
 - A responsive desktop/mobile interface following the supplied references.
+- A public Cloudflare Pages frontend with a custom-domain option and Terraform-managed AWS infrastructure. Cloudflare project/domain configuration is a separate setup step.
 
 ### Excluded from the first implementation
 
@@ -36,9 +48,12 @@ The desktop layout uses a department/document sidebar and a focused chat panel. 
 
 ## Architecture
 
-- **Web:** React, Vite, and TypeScript. The browser uses Cognito's OAuth authorization-code flow with PKCE. Users enter the selected Cognito account's username and password at sign-in; account switching clears the local app session and returns through Cognito logout to the sign-in page.
+- **Web:** React, Vite, and TypeScript, hosted as static assets on Cloudflare Pages for the public demo. The browser uses Cognito managed login with OAuth authorization-code flow and PKCE. Cognito presents the username/password form; the app never handles or stores passwords. Account switching clears the local app session and requires re-authentication with `prompt=login`.
 - **API:** Python 3.12 AWS Lambda behind API Gateway HTTP API. The API verifies the Cognito access token and derives user identity/groups only from verified claims. Request bodies never select or override a role.
+- **Token contract:** Protected routes require the Cognito `openid` authorization scope and the API accepts only authorizer claims with `token_use=access`. The public health route has no user-data access.
 - **Document storage and ingestion:** S3 stores source files in a private bucket. An ingestion worker extracts text, chunks it, adds department/source metadata, and writes vectors to Qdrant. Keep ingestion separate from question answering so extraction work does not lengthen the interactive request path. The API authorizes document opens and issues short-lived links; the browser never receives broad bucket access.
+- **Retrieval indexes:** Create Qdrant keyword payload indexes for `department` and `document_id` before filtered queries or replacement writes, including when the collection already exists.
+- **Infrastructure:** Terraform in `infra/terraform/` manages AWS resources, including Cognito managed-login branding. The initial prototype used SAM; new deployment work follows Terraform. Cloudflare Pages configuration is documented in README.
 - **Retrieval and generation:** Local CPU embeddings (FastEmbed) and Qdrant provide vector search. The API applies an exact department filter before retrieved text enters the prompt. Groq is the proposed external inference provider from the source brief; provider choice remains subject to current free-tier limits, data-retention terms, and deployment-region constraints.
 - **Guardrails and telemetry:** Apply input/output PII checks in the API, reject unauthorized or unsupported requests, and log operational metadata without storing raw prompts or document excerpts by default. Show token cost as an estimate and label it as such.
 
@@ -52,7 +67,7 @@ The desktop layout uses a department/document sidebar and a focused chat panel. 
 
 ## Cost and Configuration
 
-Avoid Bedrock Knowledge Bases and OpenSearch Serverless for the initial cost-constrained prototype. Treat Lambda, API Gateway, S3, Cognito, Qdrant, embeddings, inference, and monitoring as separate cost/quota items. AWS free allowances and third-party developer tiers vary by account, region, time, and usage; do not describe this design as guaranteed $0. Before deployment, verify current rates and free allowances, configure a budget alert, and require explicit approval before creating billable cloud resources. Store secrets in environment-backed local configuration or AWS Secrets Manager, never in source control. The current Cognito pricing page documents plan capabilities and usage pricing: [Amazon Cognito pricing](https://aws.amazon.com/cognito/pricing/).
+Minimize demo costs by using eligible service allowances; an indefinite $0 bill is not a requirement or guarantee. Avoid Bedrock Knowledge Bases and OpenSearch Serverless for this prototype. Verify account/region eligibility, provider quotas, egress, storage, logging, and data handling before provisioning. Configure a billing alert, obtain deployment authorization before provisioning billable resources, and use synthetic documents for initial acceptance. Never commit credentials or expose provider keys in browser configuration; the selected AWS deployment retrieves keys from Secrets Manager. Setup details and pricing references belong in [README](../../../README.md#aws-prototype-setup-with-terraform).
 
 ## Failure Behavior
 
@@ -71,10 +86,12 @@ Avoid Bedrock Knowledge Bases and OpenSearch Serverless for the initial cost-con
 5. PII guardrails and failure states are visible and do not expose protected text in errors or routine logs.
 6. The main journey works at desktop and mobile widths with keyboard-accessible identity, folder, citation, and chat controls.
 7. Local setup, tests, and deployment steps are documented after the implementation stack is established; cloud deployment cost is verified before resources are provisioned.
+8. The Cloudflare Pages production URL, and selected custom domain when configured, support HTTPS sign-in/logout and cited chat using the AWS API. Cognito URLs and API CORS match the deployed origin; frontend assets expose no provider secrets.
 
 ## Decisions and Open Items
 
 - **Selected:** Cognito username/password authentication. Passwordless passkeys were considered but rejected because the user chose standard credentials.
+- **Selected:** Cognito managed login owns the credential form; selecting another account identity requires a fresh username/password entry. Cognito's `prompt=login` parameter requests re-authentication even if a Cognito session exists. See [AWS authorization endpoint documentation](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html).
 - **Selected:** React/Vite/TypeScript frontend with a Python Lambda API, matching the screenshot-led UI needs and the AWS/Python architecture in the source brief.
 - **Cost status:** The source document's historical free-tier amounts are not treated as current pricing. Verify exact regional/service costs and third-party terms during implementation planning.
 - **Data status:** Use synthetic documents for initial acceptance. Any move to real confidential documents requires an explicit review of inference-provider retention, region, and data-processing terms.

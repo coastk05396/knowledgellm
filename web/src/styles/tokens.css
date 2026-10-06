@@ -1,0 +1,33 @@
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+:root {
+  color-scheme: dark;
+  --canvas: #202326;
+  --surface: #25292d;
+  --raised: #292e35;
+  --border: #48535f;
+  --text: #edf0f3;
+  --muted: #adb8c6;
+  --finance: #ed9678;
+  --operations: #62b7c3;
+  --people: #b79bde;
+  --gold: #e3be73;
+  --green: #39bd7b;
+  font-family: "IBM Plex Sans", sans-serif;
+  color: var(--text);
+  background: var(--canvas);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+.finance {
+  --accent: var(--finance);
+}
+.operations {
+  --accent: var(--operations);
+}
+.people {
+  --accent: var(--people);
+}
