@@ -223,6 +223,14 @@ export function Workspace({
             </p>
           )}
         </div>
+        <Composer
+          onSend={send}
+          suggestion={suggestion}
+          disabled={!session || loading || !documents.length}
+          busy={busy}
+          name={name.split(" ")[0]}
+          access={access}
+        />
         <div className="mobile-monitor">
           <SystemMonitor
             cost={cost}
@@ -232,14 +240,6 @@ export function Workspace({
             failed={chatFailed}
           />
         </div>
-        <Composer
-          onSend={send}
-          suggestion={suggestion}
-          disabled={!session || loading || !documents.length}
-          busy={busy}
-          name={name.split(" ")[0]}
-          access={access}
-        />
       </main>
     </div>
   );

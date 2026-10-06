@@ -70,7 +70,7 @@ describe("Authorized knowledge workspace", () => {
     },
   );
   it("keeps the mobile identity and status copy aligned with the reference", async () => {
-    render(
+    const { container } = render(
       <Workspace
         session={session}
         onSwitch={async () => {}}
@@ -99,6 +99,12 @@ describe("Authorized knowledge workspace", () => {
         name: "Sign in as another account: Alex, Finance",
       }),
     ).toHaveAttribute("aria-pressed", "true");
+    const composer = container.querySelector(".composer-wrap")!;
+    const monitor = container.querySelector(".mobile-monitor")!;
+    expect(
+      composer.compareDocumentPosition(monitor) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("only displays documents received from the authorized API", async () => {

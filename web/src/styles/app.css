@@ -710,36 +710,49 @@ h2 {
     display: block;
   }
   .identity-cards {
-    overflow-x: auto;
-    scrollbar-width: thin;
-    padding: 0 0 3px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0;
     background: transparent;
     border: 0;
     border-radius: 0;
-    gap: 10px;
+    gap: 6px;
   }
   .identity-card {
     border-color: var(--border);
     background: var(--surface);
-    padding: 13px 10px;
-    min-width: 146px;
-    flex: 0 0 auto;
+    padding: 10px 4px;
+    min-width: 0;
+    flex-direction: column;
     border-radius: 11px;
-    gap: 10px;
+    gap: 6px;
+    white-space: normal;
   }
   .identity-card .avatar {
-    width: 34px;
-    height: 34px;
-    font-size: 16px;
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+  .identity-text {
+    align-items: center;
+    width: 100%;
+  }
+  .identity-auth-subline {
+    justify-content: center;
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+  .identity-auth-subline::before {
+    flex-shrink: 0;
   }
   .identity-primary {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 0;
   }
   .identity-card strong {
     color: var(--text);
-    font-size: 16px;
+    font-size: 14px;
     display: block;
     font-weight: 600;
   }
@@ -747,7 +760,7 @@ h2 {
     display: block;
     margin-top: 2px;
     font:
-      12px "IBM Plex Mono",
+      10px "IBM Plex Mono",
       monospace;
   }
   .identity-card small::before {
@@ -903,9 +916,9 @@ h2 {
   }
   .mobile-monitor {
     display: block;
-    padding: 12px 24px;
+    padding: 12px 24px max(24px, env(safe-area-inset-bottom));
     background: var(--canvas);
-    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
   }
   .system-monitor {
     display: grid;
@@ -930,15 +943,17 @@ h2 {
     font-size: 13px;
   }
   .composer-wrap {
-    padding: 14px 24px max(24px, env(safe-area-inset-bottom));
+    padding: 14px 24px;
   }
   .composer {
     padding: 10px;
     gap: 6px;
   }
   .composer textarea {
-    font-size: 15px;
-    padding-inline: 5px;
+    font-size: 16px;
+    line-height: 1.25;
+    height: calc(2lh + 12px);
+    padding: 6px 5px;
   }
   .access-caption {
     font-size: 10px;
