@@ -116,6 +116,10 @@ The prototype models three representative enterprise identities:
 - [x] TypeScript build runs clean (`npm run build`).
 - [x] Infrastructure declared in Terraform and in sync with AWS (`0 changes`).
 
+- [x] Header displays persona buttons with AWS Cognito sign-in indicator under name.
+- [x] Separate people/account icon removed from top header.
+- [x] Sample Markdown documents enriched with realistic operational content while maintaining lightweight file sizes (~1.2-1.5 KB).
+
 ---
 
 ## 7. Required Fixes & Active Issues
@@ -137,4 +141,25 @@ The prototype models three representative enterprise identities:
   - [ ] Confirm `/documents` API response parsing and document state update for `operations` in `web/src/app/api.ts`.
   - [ ] Verify `web/src/components/DepartmentFolders.tsx` evaluates `permitted = true` for `operations` and removes `<LockKeyhole />`.
   - [ ] Verify automatic expansion state `expanded` cleanly reveals `#files-operations`.
+
+### Issue #2: Display AWS Cognito Login Label Under Persona Name
+- **Status**: 🟢 Completed
+- **Requirement**: Under the persona name, display the small text subline `AWS Cognito verified while login` alongside the department label.
+- **Implementation**:
+  - Updated [IdentityPicker.tsx](file:///home/rick/repo/knowledgellm/web/src/components/IdentityPicker.tsx) and [app.css](file:///home/rick/repo/knowledgellm/web/src/styles/app.css) with a dedicated `.identity-text` container displaying the persona name/department in the primary line and `.identity-auth-subline` showing `AWS Cognito verified while login` below.
+  - Formatted `.identity-label` to cleanly separate `Identity` and `Tap to switch`.
+
+### Issue #3: Remove Redundant People / User Icon Button From Header
+- **Status**: 🟢 Completed
+- **Requirement**: Remove the separate user/people icon button on the far right of the top navigation bar since persona authentication is directly triggered from the persona cards.
+- **Implementation**:
+  - Removed `<button className="account-button"><UserRound /></button>` from `web/src/app/App.tsx` and removed the unused `UserRound` import.
+
+### Issue #4: Enrich Sample Markdown Files With Realistic Content
+- **Status**: 🟢 Completed
+- **Requirement**: Expand all sample documents across `finance/`, `operations/`, and `people/` with realistic corporate policy and procedures info while keeping file sizes lightweight (~1.2–1.5 KB).
+- **Implementation**:
+  - Enriched `expense-policy.md`, `q4-budget-overview.md`, `runbook-procedures.md`, `service-handoff.md`, `employee-handbook.md`, and `leave-policy.md` under `api/src/knowledgellm/sample_docs/`.
+  - Synced all updated markdown files to the private S3 bucket `s3://knowledgellm-demo-docs-90feb739268a188cf33a5e41c6/` in Singapore (`ap-southeast-1`), automatically triggering vector re-ingestion via EventBridge.
+
 

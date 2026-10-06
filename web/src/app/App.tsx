@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogIn, Terminal, UserRound } from "lucide-react";
+import { LogIn, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
@@ -144,16 +144,6 @@ export function Workspace({
           onSwitch={switchAccount}
           disabled={authLoading || (!session && !authConfigured)}
         />
-        <button
-          className="account-button"
-          aria-label={
-            session ? "Switch signed-in account" : "Sign in to your account"
-          }
-          onClick={() => switchAccount()}
-          disabled={authLoading || (!session && !authConfigured)}
-        >
-          <UserRound />
-        </button>
       </header>
       <aside className="sidebar">
         <DepartmentFolders

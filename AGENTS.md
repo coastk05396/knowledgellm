@@ -63,6 +63,9 @@ Do not hardcode API keys, passwords, tokens, or other credentials. Keep local co
 - [x] ~~Support accordion toggle to manually expand/collapse department files~~
 - [x] ~~Implement document inspection via short-lived presigned S3 URLs in a new tab~~
 - [x] ~~Implement chat interface with identity-scoped greetings and grounded response display~~
+- [x] ~~Display AWS Cognito sign-in indicator under persona buttons (`${label} · AWS Cognito`)~~
+- [x] ~~Remove redundant user/account icon button from top navigation header~~
+- [x] ~~Enrich sample markdown documents with structured, realistic enterprise content (~1.2-1.5 KB) and sync to S3~~
 - [x] ~~Provide system monitor tracking session tokens and estimated API inference costs~~
 - [x] ~~Unit test suite passing with 100% green tests in Vitest (21/21 tests)~~
 - [x] ~~Production bundle builds cleanly with TypeScript (`npm run build`)~~
