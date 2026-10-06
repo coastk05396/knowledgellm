@@ -2,12 +2,17 @@
 
 🔐 KnowledgeLLM is a permission-aware knowledge assistant prototype. Cognito manages username/password sign-in; a Python API applies Cognito group access before listing S3 documents or retrieving Qdrant chunks. Answers cite only approved, retrieved documents. The included content is fictional.
 
-## Documentation
+## RAG pipeline
 
-- [Product spec](docs/superpowers/specs/2026-10-06-knowledgellm-design.md): edit requirements, constraints, and acceptance criteria here.
-- [Implementation plan](docs/superpowers/plans/2026-10-06-knowledgellm-full-stack-prototype.md): tasks, deployment/demo checklist, and verification results.
-- [Project status](docs/product-development.md): document ownership, current status, and next action.
-- [Agent instructions](AGENTS.md): coding-agent rules.
+![KnowledgeLLM RAG pipeline: a question passes PII checks, FastEmbed creates a query vector, Qdrant retrieves department-permitted chunks, and Groq generates an answer checked for PII and valid citations. A separate S3 ingestion flow indexes document chunks.](docs/design/architecture/knowledgellm-rag-pipeline.png)
+
+1. **Authorize:** Cognito signs in the user; API Gateway validates the JWT. The backend derives Finance, Operations, or People access from verified group claims.
+2. **Retrieve:** reject questions containing recognized PII patterns, embed the question with FastEmbed (`all-MiniLM-L6-v2`), and search Qdrant with department filters. The backend also checks retrieved document IDs against its approved catalog.
+3. **Generate:** mask recognized PII in retrieved text; send system instructions, permitted excerpts, and the question to Groq (`gpt-oss-20b`).
+4. **Return:** block PII in output and accept only citations to approved retrieved sources. Unsupported questions return a no-information response; provider failures return a service error.
+5. **Observe:** return the guardrail outcome and model usage to the UI, and log metadata to CloudWatch without question, answer, or source text. The displayed dollar value is a token-based estimate, not an invoice or the total AWS bill.
+
+Ingestion runs separately when approved Markdown files are created in S3. It chunks text, attaches department/source metadata, embeds it, and replaces that document's vectors in Qdrant. Query-time embedding and document embedding use the same model. The three chunks in the illustration are examples; retrieval requests up to five matches.
 
 ## Deployment architecture
 
@@ -49,18 +54,6 @@ The AWS backend is deployed in Singapore (`ap-southeast-1`) and managed by Terra
 ```
 
 Pages serves static assets without a Docker container. Keep provider keys in the backend secret store; all `VITE_*` configuration is visible in the browser bundle. Cloudflare's static asset requests are free and unlimited, subject to other platform limits; AWS and external providers have separate charges. See [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and [Cloudflare setup](#cloudflare-pages-setup).
-
-## RAG pipeline
-
-![KnowledgeLLM RAG pipeline: a question passes PII checks, FastEmbed creates a query vector, Qdrant retrieves department-permitted chunks, and Groq generates an answer checked for PII and valid citations. A separate S3 ingestion flow indexes document chunks.](docs/design/architecture/knowledgellm-rag-pipeline.png)
-
-1. **Authorize:** Cognito signs in the user; API Gateway validates the JWT. The backend derives Finance, Operations, or People access from verified group claims.
-2. **Retrieve:** reject questions containing recognized PII patterns, embed the question with FastEmbed (`all-MiniLM-L6-v2`), and search Qdrant with department filters. The backend also checks retrieved document IDs against its approved catalog.
-3. **Generate:** mask recognized PII in retrieved text; send system instructions, permitted excerpts, and the question to Groq (`gpt-oss-20b`).
-4. **Return:** block PII in output and accept only citations to approved retrieved sources. Unsupported questions return a no-information response; provider failures return a service error.
-5. **Observe:** return the guardrail outcome and model usage to the UI, and log metadata to CloudWatch without question, answer, or source text. The displayed dollar value is a token-based estimate, not an invoice or the total AWS bill.
-
-Ingestion runs separately when approved Markdown files are created in S3. It chunks text, attaches department/source metadata, embeds it, and replaces that document's vectors in Qdrant. Query-time embedding and document embedding use the same model. The three chunks in the illustration are examples; retrieval requests up to five matches.
 
 ## Local development
 
