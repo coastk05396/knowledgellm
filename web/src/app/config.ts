@@ -9,11 +9,23 @@ const env = (
   import.meta as ImportMeta & { env: Record<string, string | undefined> }
 ).env;
 export const appConfig: AppConfig = {
-  apiUrl: env.VITE_API_URL ?? "",
-  cognitoDomain: (env.VITE_COGNITO_DOMAIN ?? "").replace(/\/$/, ""),
-  cognitoIssuer: env.VITE_COGNITO_ISSUER ?? "",
-  cognitoClientId: env.VITE_COGNITO_CLIENT_ID ?? "",
-  redirectUri: env.VITE_REDIRECT_URI ?? window.location.origin + "/",
+  apiUrl:
+    env.VITE_API_URL ||
+    "https://wn85mhcff0.execute-api.ap-southeast-1.amazonaws.com",
+  cognitoDomain: (
+    env.VITE_COGNITO_DOMAIN ||
+    "https://rick-knowledgellm-demo.auth.ap-southeast-1.amazoncognito.com"
+  ).replace(/\/$/, ""),
+  cognitoIssuer:
+    env.VITE_COGNITO_ISSUER ||
+    "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_5aSsCjK0K",
+  cognitoClientId:
+    env.VITE_COGNITO_CLIENT_ID || "25kol0lmnr3kdk71tt60qrjv0u",
+  redirectUri:
+    env.VITE_REDIRECT_URI ||
+    (typeof window !== "undefined"
+      ? window.location.origin + "/"
+      : "http://localhost:5173/"),
 };
 export const authConfigured = Boolean(
   appConfig.cognitoDomain &&

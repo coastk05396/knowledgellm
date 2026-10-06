@@ -5,11 +5,28 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { signIn, signInAsPersona, switchIdentity, userManager, type Session } from "./auth";
+import type { Department } from "../app/api";
+import { identities } from "../components/IdentityPicker";
+import {
+  signIn,
+  signInAsPersona,
+  switchIdentity,
+  userManager,
+  type Session,
+} from "./auth";
+
+export interface ToastInfo {
+  message: string;
+  subtitle?: string;
+  department?: Department;
+}
+
 interface AuthState {
   session: Session | null;
   loading: boolean;
   error: string | null;
+  toast: ToastInfo | null;
+  clearToast: () => void;
   login: () => Promise<void>;
   loginAsPersona: (department: string) => Promise<void>;
   switchAccount: () => Promise<void>;
@@ -54,6 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(Boolean(userManager));
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastInfo | null>(null);
+
+  const clearToast = () => setToast(null);
+
   useEffect(() => {
     if (!userManager) return;
     let active = true;
@@ -88,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   const switchAccount = async () => {
     setSession(null);
+    setToast(null);
     setLoading(true);
     restoration = undefined;
     try {
@@ -105,7 +127,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const newSession = await signInAsPersona(department);
       setSession(newSession);
-    } catch {
+      const persona = identities.find((p) => p.department === department);
+      const shortName = persona ? persona.name : newSession.name.split(" ")[0];
+      const deptLabel = persona ? persona.label : department;
+      setToast({
+        message: `${shortName} signed in successfully`,
+        subtitle: `${deptLabel} folder unlocked`,
+        department: department as Department,
+      });
+    } catch (err) {
+      console.error("loginAsPersona failed:", err);
       setError("Could not sign in with this persona. Please try again.");
     } finally {
       setLoading(false);
@@ -113,7 +144,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   return (
     <AuthContext.Provider
-      value={{ session, loading, error, login, loginAsPersona, switchAccount }}
+      value={{
+        session,
+        loading,
+        error,
+        toast,
+        clearToast,
+        login,
+        loginAsPersona,
+        switchAccount,
+      }}
     >
       {children}
     </AuthContext.Provider>

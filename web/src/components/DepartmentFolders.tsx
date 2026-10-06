@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -18,6 +18,11 @@ export function DepartmentFolders({
   loading: boolean;
 }) {
   const [closed, setClosed] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Auto-expand newly permitted folders when documents change
+    setClosed([]);
+  }, [documents]);
   return (
     <section className="folders" aria-labelledby="folders-title">
       <div className="folder-heading">

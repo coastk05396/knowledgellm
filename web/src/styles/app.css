@@ -118,11 +118,21 @@ h2 {
   gap: 18px;
 }
 .identity-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
   text-transform: uppercase;
   letter-spacing: 2px;
   font-size: 11px;
   font-weight: 500;
   color: var(--muted);
+  white-space: nowrap;
+}
+.identity-sublabel {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  opacity: 0.8;
 }
 .identity-cards {
   display: flex;
@@ -150,6 +160,17 @@ h2 {
 .identity-card:disabled {
   opacity: 0.65;
 }
+.identity-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+.identity-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .identity-card strong {
   font-size: 14px;
   font-weight: 500;
@@ -160,6 +181,26 @@ h2 {
 }
 .identity-card small::before {
   content: " · ";
+}
+.identity-auth-subline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: var(--green);
+  margin-top: 2px;
+}
+.identity-auth-subline::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }
 .avatar {
   display: grid;
@@ -651,7 +692,9 @@ h2 {
   }
   .identity-label {
     display: flex;
+    flex-direction: row;
     justify-content: space-between;
+    align-items: center;
     font-size: 11px;
     letter-spacing: 1.8px;
     margin-bottom: 15px;
@@ -921,6 +964,99 @@ h2 {
   }
   .folder-button strong {
     font-size: 15px;
+  }
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  min-width: 280px;
+  max-width: 420px;
+  animation: toast-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast.finance {
+  border-left-color: var(--finance);
+}
+.toast.operations {
+  border-left-color: var(--operations);
+}
+.toast.people {
+  border-left-color: var(--people);
+}
+.toast-icon {
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.toast.finance .toast-icon {
+  color: var(--finance);
+}
+.toast.operations .toast-icon {
+  color: var(--operations);
+}
+.toast.people .toast-icon {
+  color: var(--people);
+}
+.toast-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.toast-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+}
+.toast-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+}
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: auto;
+}
+.toast-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+@keyframes toast-slide-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {

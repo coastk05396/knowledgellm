@@ -320,13 +320,12 @@ resource "aws_apigatewayv2_route" "health" {
 }
 
 resource "aws_apigatewayv2_route" "protected" {
-  for_each             = toset(["GET /documents", "GET /documents/{documentId}", "POST /chat"])
-  api_id               = aws_apigatewayv2_api.knowledge.id
-  route_key            = each.value
-  target               = "integrations/${aws_apigatewayv2_integration.knowledge.id}"
-  authorization_type   = "JWT"
-  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["openid"]
+  for_each           = toset(["GET /documents", "GET /documents/{documentId}", "POST /chat"])
+  api_id             = aws_apigatewayv2_api.knowledge.id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.knowledge.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
 resource "aws_apigatewayv2_stage" "default" {

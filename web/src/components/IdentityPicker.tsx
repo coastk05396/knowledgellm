@@ -23,7 +23,7 @@ export function IdentityPicker({
       <div className="identity-label">
         <span className="desktop-only">Identity</span>
         <span className="mobile-only">View as</span>
-        <span>Tap to switch</span>
+        <span className="identity-sublabel">Tap to switch</span>
       </div>
       <div className="identity-cards">
         {identities.map((person) => (
@@ -38,9 +38,16 @@ export function IdentityPicker({
             aria-describedby="account-switch-note"
           >
             <span className="avatar">{person.initial}</span>
-            <span>
-              <strong>{person.name}</strong>
-              <small>{person.label}</small>
+            <span className="identity-text">
+              <span className="identity-primary">
+                <strong>{person.name}</strong>
+                <small>{person.label}</small>
+              </span>
+              {departments.includes(person.department) && (
+                <span className="identity-auth-subline">
+                  AWS Cognito verified
+                </span>
+              )}
             </span>
           </button>
         ))}

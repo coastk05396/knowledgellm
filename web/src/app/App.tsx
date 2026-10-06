@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogIn, Terminal, UserRound } from "lucide-react";
+import { LogIn, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
@@ -9,6 +9,7 @@ import { DepartmentFolders } from "../components/DepartmentFolders";
 import { ChatPanel, type Message } from "../components/ChatPanel";
 import { Composer } from "../components/Composer";
 import { SystemMonitor } from "../components/SystemMonitor";
+import { Toast } from "../components/Toast";
 import "../styles/tokens.css";
 import "../styles/app.css";
 interface WorkspaceProps {
@@ -143,16 +144,6 @@ export function Workspace({
           onSwitch={switchAccount}
           disabled={authLoading || (!session && !authConfigured)}
         />
-        <button
-          className="account-button"
-          aria-label={
-            session ? "Switch signed-in account" : "Sign in to your account"
-          }
-          onClick={() => switchAccount()}
-          disabled={authLoading || (!session && !authConfigured)}
-        >
-          <UserRound />
-        </button>
       </header>
       <aside className="sidebar">
         <DepartmentFolders
@@ -239,13 +230,23 @@ function ConnectedApp() {
     }
   };
   return (
-    <Workspace
-      key={auth.session?.accessToken ?? "signed-out"}
-      session={auth.session}
-      onSwitch={handleSwitch}
-      authLoading={auth.loading}
-      authError={auth.error}
-    />
+    <>
+      <Workspace
+        key={auth.session?.accessToken ?? "signed-out"}
+        session={auth.session}
+        onSwitch={handleSwitch}
+        authLoading={auth.loading}
+        authError={auth.error}
+      />
+      {auth.toast && (
+        <Toast
+          message={auth.toast.message}
+          subtitle={auth.toast.subtitle}
+          department={auth.toast.department}
+          onClose={auth.clearToast}
+        />
+      )}
+    </>
   );
 }
 export default function App() {
