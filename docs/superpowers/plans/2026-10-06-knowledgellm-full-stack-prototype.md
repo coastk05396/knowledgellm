@@ -212,3 +212,14 @@ Existing checks needing follow-up: the full backend suite reports 41 passed and 
 Read-only CloudWatch inspection on 2026-10-06 confirmed that `knowledgellm-demo-knowledge` fails during the FastEmbed model download with `Read-only file system (os error 30)`. The 13:20:59 UTC request logged `assistant_unavailable`, zero input/output tokens, and a null cost; subsequent requests also failed. The deployed function has no `FASTEMBED_CACHE_PATH` or `HF_HOME` setting. The shared cache fix above remains pending deployment to both Lambdas.
 
 The UI monitor currently waits for a successful chat response: failed requests leave `Awaiting response` and `Unavailable`. Estimated dollar cost also requires configured Groq input/output rates; token counts and guardrail outcomes are available in CloudWatch telemetry. No AWS resources were modified during diagnosis.
+
+### Deployed cache fix and live chat verification
+
+- [x] With Rick's deployment authorization, build the 231.7 MiB uncompressed package and apply the reviewed Terraform plan in `ap-southeast-1`: ZIP plus both Lambdas updated; no additions or deletions. Both functions use writable FastEmbed/Hugging Face caches.
+- [x] Reprocess the six existing approved S3 sample documents using a synchronous ingestion invocation; the response reports 12 indexed chunks. S3 source contents were preserved.
+- [x] Configure the existing Terraform rate variables in ignored local configuration: input $0.075 and output $0.30 per million tokens, from [Groq's published model rates](https://console.groq.com/docs/models), checked 2026-10-06. Apply changes to the knowledge Lambda only. This configures list-price estimates and does not enroll in a paid plan or verify the account's billing tier.
+- [x] Verify live Cognito sign-in and `/chat` in the browser: budget answer returns HTTP 200 with the authorized Q4 source citation, 1,063 input tokens, 337 output tokens, and estimated $0.000180825. An email-pattern question is refused before generation. CloudWatch records `pass` and `question_pii_blocked` with no protected text.
+- [x] Fix the UI's session-cost reset on a response without a cost estimate. The regression test failed before the fix; all 26 frontend tests and the production build now pass. A live browser rerun retains `$0.0002 est.` after the refusal.
+- [x] Capture the [live chat and monitor preview](../../design/verification/2026-10-06-live-chat-monitor.png).
+
+The earlier pending cache deployment is now completed. Direct invocation verifies ingestion; the S3/EventBridge trigger was previously confirmed and was not retriggered by rewriting documents. Live checks above cover Finance and input PII refusal; output PII and full cross-department chat verification remain separate acceptance checks. Changes are submitted in [PR #5](https://github.com/coastk05396/knowledgellm/pull/5); no merge was performed.

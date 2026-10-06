@@ -374,3 +374,48 @@ it("opens a citation in a separate tab so the active conversation stays open", a
   expect(sourceWindow.opener).toBeNull();
   expect(screen.getByText("Vendor costs changed.")).toBeVisible();
 });
+
+it("retains session cost after a response without an estimate and resets on new chat", async () => {
+  const askQuestion = vi
+    .fn()
+    .mockResolvedValueOnce({
+      answer: "Budget answer",
+      citations: [],
+      cost_usd: 0.0012,
+    })
+    .mockResolvedValueOnce({
+      answer: "Remove personal details",
+      citations: [],
+    });
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => [
+          {
+            id: "finance-q4",
+            title: "Q4 budget overview",
+            department: "finance",
+          },
+        ],
+        askQuestion,
+        openDocument: async () => "https://docs.example.com/source.md",
+      }}
+    />,
+  );
+  await screen.findByRole("button", { name: "Q4 budget overview" });
+  for (const [question, answer] of [
+    ["Budget?", "Budget answer"],
+    ["Private details", "Remove personal details"],
+  ]) {
+    fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
+      target: { value: question },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+    await screen.findByText(answer);
+    expect(screen.getAllByText("$0.0012 est.")).toHaveLength(2);
+  }
+  fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+  expect(screen.queryByText("$0.0012 est.")).not.toBeInTheDocument();
+});

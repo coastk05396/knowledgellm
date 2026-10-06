@@ -110,7 +110,7 @@ export function Workspace({
       setMessages((current) => [...current, { question, response }]);
       setCost((current) =>
         response.cost_usd === undefined
-          ? null
+          ? current
           : (current ?? 0) + response.cost_usd,
       );
       return true;

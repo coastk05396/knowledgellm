@@ -19,7 +19,7 @@ Edit the product spec when you want to change what KnowledgeLLM should do. Keep 
 
 ## Current follow-up
 
-Verified identity/folder behavior and writable FastEmbed caches are implemented on `main-20261006-fix-cognito-folder-state`. See the plan’s final follow-up section for checks, previews, and the remaining Lambda deployment/ingestion check.
+Verified identity/folder behavior and writable FastEmbed caches are submitted in [PR #5](https://github.com/coastk05396/knowledgellm/pull/5). The cache fix is deployed through Terraform; ingestion indexed 12 sample chunks and live Finance chat/PII checks passed. See the plan’s final follow-up sections for evidence and remaining acceptance checks.
 
 ## Next action
 
