@@ -527,6 +527,33 @@ h2 {
   color: var(--muted);
   font-size: 14px;
 }
+.thinking-icon {
+  color: var(--gold);
+  animation: thinking-spin 1.5s linear infinite;
+}
+.thinking-dots span {
+  animation: thinking-dot 1.2s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes thinking-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 .workspace-notices {
   width: min(100%, 850px);
   padding: 0 36px 20px;
@@ -539,24 +566,6 @@ h2 {
   border-left: 2px solid var(--finance);
   padding: 12px 15px;
   line-height: 1.5;
-}
-.login-notice {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.sign-in {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 16px;
-  border-radius: 8px;
-  color: var(--gold);
-  border-color: var(--gold);
-}
-.sign-in:disabled {
-  opacity: 0.65;
 }
 .composer-wrap {
   width: min(100%, 850px);
@@ -710,36 +719,51 @@ h2 {
     display: block;
   }
   .identity-cards {
-    overflow-x: auto;
-    scrollbar-width: thin;
-    padding: 0 0 3px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0;
     background: transparent;
     border: 0;
     border-radius: 0;
-    gap: 10px;
+    gap: 6px;
   }
   .identity-card {
     border-color: var(--border);
     background: var(--surface);
-    padding: 13px 10px;
-    min-width: 146px;
-    flex: 0 0 auto;
+    padding: 10px 4px;
+    min-width: 0;
+    flex-direction: column;
     border-radius: 11px;
-    gap: 10px;
+    gap: 6px;
+    white-space: normal;
   }
   .identity-card .avatar {
-    width: 34px;
-    height: 34px;
-    font-size: 16px;
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+  .identity-text {
+    align-items: center;
+    width: 100%;
+  }
+  .identity-auth-subline {
+    display: block;
+    text-align: center;
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+  .identity-auth-subline::before {
+    margin-right: 4px;
+    vertical-align: middle;
   }
   .identity-primary {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 0;
   }
   .identity-card strong {
     color: var(--text);
-    font-size: 16px;
+    font-size: 14px;
     display: block;
     font-weight: 600;
   }
@@ -747,7 +771,7 @@ h2 {
     display: block;
     margin-top: 2px;
     font:
-      12px "IBM Plex Mono",
+      10px "IBM Plex Mono",
       monospace;
   }
   .identity-card small::before {
@@ -756,7 +780,7 @@ h2 {
   .sidebar {
     background: var(--canvas);
     border: 0;
-    padding: 0 24px 24px;
+    padding: 20px 24px 24px;
   }
   .folder-heading {
     padding: 0;
@@ -903,9 +927,9 @@ h2 {
   }
   .mobile-monitor {
     display: block;
-    padding: 12px 24px;
+    padding: 12px 24px max(24px, env(safe-area-inset-bottom));
     background: var(--canvas);
-    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
   }
   .system-monitor {
     display: grid;
@@ -930,15 +954,17 @@ h2 {
     font-size: 13px;
   }
   .composer-wrap {
-    padding: 14px 24px max(24px, env(safe-area-inset-bottom));
+    padding: 14px 24px;
   }
   .composer {
     padding: 10px;
     gap: 6px;
   }
   .composer textarea {
-    font-size: 15px;
-    padding-inline: 5px;
+    font-size: 16px;
+    line-height: 1.25;
+    height: calc(2lh + 12px);
+    padding: 6px 5px;
   }
   .access-caption {
     font-size: 10px;

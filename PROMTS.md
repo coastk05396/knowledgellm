@@ -18,6 +18,10 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 ## Interface and Chat
 
 - Keep the graphite theme, department accents, responsive desktop/sidebar and mobile/accordion layouts, keyboard focus, reduced motion, descriptive icon labels, and 44px touch targets.
+- On mobile, fit all three compact persona cards without horizontal scrolling, including the active verification label. Place the question composer and access caption above the PII guardrail/token-cost panel; use compact line spacing and room for two input lines.
+- Use the persona cards as the sign-in entry points on mobile and desktop; omit the separate initial Sign in button and Cognito username/password instruction.
+- On mobile, keep the verification dot inline with the centered first line of its label, and give the Department Folders heading 20px of space above it.
+- While an answer is pending, animate the source-checking star and trailing dots on desktop and mobile. Keep a stable accessible status message and disable animation when reduced motion is requested.
 - After authentication and successful authorized document listing, show a small green `AWS Cognito Verified` line under the active name and a success toast. Remove its folder lock, display its document count, and expand its files. Keep other folders locked; clear verification on switching or listing failure.
 - Provide five document-based question buttons per authorized department instead of the identity introduction and permission badges. Clicking fills and focuses the composer without submitting; disable during pending requests and clear on switching or New chat.
 - Open documents and citations through authorized, short-lived S3 links. Preserve the conversation when opening a source.
