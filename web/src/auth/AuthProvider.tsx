@@ -5,17 +5,26 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { signIn, switchIdentity, userManager, type Session } from "./auth";
+import { signIn, signInAsPersona, switchIdentity, userManager, type Session } from "./auth";
 interface AuthState {
   session: Session | null;
   loading: boolean;
   error: string | null;
   login: () => Promise<void>;
+  loginAsPersona: (department: string) => Promise<void>;
   switchAccount: () => Promise<void>;
 }
 const AuthContext = createContext<AuthState | null>(null);
 let restoration: Promise<Session | null> | undefined;
 async function restoreSession(): Promise<Session | null> {
+  const directSessionStr = sessionStorage.getItem("knowledge-direct-session");
+  if (directSessionStr) {
+    try {
+      return JSON.parse(directSessionStr) as Session;
+    } catch {
+      sessionStorage.removeItem("knowledge-direct-session");
+    }
+  }
   if (!userManager) return null;
   if (sessionStorage.getItem("knowledge-account-switch")) {
     sessionStorage.removeItem("knowledge-account-switch");
@@ -90,9 +99,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
     }
   };
+  const loginAsPersona = async (department: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const newSession = await signInAsPersona(department);
+      setSession(newSession);
+    } catch {
+      setError("Could not sign in with this persona. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <AuthContext.Provider
-      value={{ session, loading, error, login, switchAccount }}
+      value={{ session, loading, error, login, loginAsPersona, switchAccount }}
     >
       {children}
     </AuthContext.Provider>

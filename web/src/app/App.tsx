@@ -13,7 +13,7 @@ import "../styles/tokens.css";
 import "../styles/app.css";
 interface WorkspaceProps {
   session: Session | null;
-  onSwitch: () => Promise<void>;
+  onSwitch: (department?: string) => Promise<void>;
   api?: KnowledgeApi;
   authLoading?: boolean;
   authError?: string | null;
@@ -122,12 +122,12 @@ export function Workspace({
       setBusy(false);
     }
   };
-  const switchAccount = () => {
+  const switchAccount = (department?: string) => {
     setDocuments([]);
     setMessages([]);
     setCost(null);
     setError(null);
-    void onSwitch();
+    void onSwitch(department);
   };
   return (
     <div className="workspace">
@@ -148,7 +148,7 @@ export function Workspace({
           aria-label={
             session ? "Switch signed-in account" : "Sign in to your account"
           }
-          onClick={switchAccount}
+          onClick={() => switchAccount()}
           disabled={authLoading || (!session && !authConfigured)}
         >
           <UserRound />
@@ -193,7 +193,7 @@ export function Workspace({
             <div className="login-notice">
               <button
                 className="sign-in"
-                onClick={switchAccount}
+                onClick={() => switchAccount()}
                 disabled={!authConfigured}
               >
                 <LogIn size={18} />
@@ -229,11 +229,20 @@ export function Workspace({
 }
 function ConnectedApp() {
   const auth = useAuth();
+  const handleSwitch = async (department?: string) => {
+    if (department) {
+      await auth.loginAsPersona(department);
+    } else if (auth.session) {
+      await auth.switchAccount();
+    } else {
+      await auth.login();
+    }
+  };
   return (
     <Workspace
       key={auth.session?.accessToken ?? "signed-out"}
       session={auth.session}
-      onSwitch={auth.session ? auth.switchAccount : auth.login}
+      onSwitch={handleSwitch}
       authLoading={auth.loading}
       authError={auth.error}
     />
