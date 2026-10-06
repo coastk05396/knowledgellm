@@ -47,12 +47,12 @@ variable "qdrant_url" {
 }
 
 variable "qdrant_api_key_secret_arn" {
-  description = "ARN of the Qdrant API key secret in Secrets Manager."
+  description = "ARN of the Qdrant API key secret in Secrets Manager or SSM Parameter Store."
   type        = string
 }
 
 variable "groq_api_key_secret_arn" {
-  description = "ARN of the Groq API key secret in Secrets Manager."
+  description = "ARN of the Groq API key secret in Secrets Manager or SSM Parameter Store."
   type        = string
 }
 

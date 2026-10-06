@@ -5,5 +5,11 @@ web_origin             = "http://localhost:5173"
 web_callback_url       = "http://localhost:5173/"
 web_logout_url         = "http://localhost:5173/"
 qdrant_url             = "https://your-cluster.example.qdrant.io"
-qdrant_api_key_secret_arn = "arn:aws:secretsmanager:ap-southeast-1:768363152398:secret:qdrant-key"
-groq_api_key_secret_arn   = "arn:aws:secretsmanager:ap-southeast-1:768363152398:secret:groq-key"
+
+# Free option: AWS Systems Manager Parameter Store (SecureString)
+qdrant_api_key_secret_arn = "arn:aws:ssm:ap-southeast-1:768363152398:parameter/knowledgellm/qdrant-api-key"
+groq_api_key_secret_arn   = "arn:aws:ssm:ap-southeast-1:768363152398:parameter/knowledgellm/groq-api-key"
+
+# Alternative: AWS Secrets Manager (Paid)
+# qdrant_api_key_secret_arn = "arn:aws:secretsmanager:ap-southeast-1:768363152398:secret:qdrant-key"
+# groq_api_key_secret_arn   = "arn:aws:secretsmanager:ap-southeast-1:768363152398:secret:groq-key"

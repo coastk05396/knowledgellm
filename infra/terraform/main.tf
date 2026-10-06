@@ -175,7 +175,10 @@ resource "aws_iam_role_policy" "knowledge" {
       },
       {
         Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "ssm:GetParameter"
+        ]
         Resource = [var.qdrant_api_key_secret_arn, var.groq_api_key_secret_arn]
       }
     ]
@@ -200,7 +203,10 @@ resource "aws_iam_role_policy" "ingestion" {
       },
       {
         Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "ssm:GetParameter"
+        ]
         Resource = [var.qdrant_api_key_secret_arn]
       }
     ]
