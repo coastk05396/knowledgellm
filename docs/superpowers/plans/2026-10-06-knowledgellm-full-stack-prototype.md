@@ -206,3 +206,9 @@ These results were recorded during the initial prototype implementation on 2026-
 - [ ] Rebuild and deploy the reviewed Lambda package and Terraform cache settings; re-upload an approved fictional document and confirm ingestion writes vectors to Qdrant without read-only filesystem errors.
 
 Existing checks needing follow-up: the full backend suite reports 41 passed and 2 failures in unchanged department-claim and sample-content tests. Repository-wide Prettier reports unchanged `App.test.tsx`, `auth.ts`, and `Toast.test.tsx`; formatting passes for this change's frontend files. These issues also exist on the starting `origin/main` revision. The cache fix has not been deployed to AWS or verified with a real model download in Lambda.
+
+### Live chat failure diagnosis
+
+Read-only CloudWatch inspection on 2026-10-06 confirmed that `knowledgellm-demo-knowledge` fails during the FastEmbed model download with `Read-only file system (os error 30)`. The 13:20:59 UTC request logged `assistant_unavailable`, zero input/output tokens, and a null cost; subsequent requests also failed. The deployed function has no `FASTEMBED_CACHE_PATH` or `HF_HOME` setting. The shared cache fix above remains pending deployment to both Lambdas.
+
+The UI monitor currently waits for a successful chat response: failed requests leave `Awaiting response` and `Unavailable`. Estimated dollar cost also requires configured Groq input/output rates; token counts and guardrail outcomes are available in CloudWatch telemetry. No AWS resources were modified during diagnosis.
