@@ -11,39 +11,56 @@
 
 ## Deployment architecture
 
-Cloudflare Pages hosts the static React/Vite frontend; Terraform manages the AWS backend. This is the planned public deployment layout:
+The AWS backend is deployed in Singapore (`ap-southeast-1`) and managed by Terraform. The current demo uses a local React/Vite frontend; Cloudflare Pages and a custom domain are the planned public frontend deployment.
 
 ```text
-┌─────────────────────────────┐       ┌─────────────────────────────┐
-│ Cloudflare Pages            │       │ Amazon Cognito              │
-│ React/Vite · custom domain  │       │ Username/password · groups  │
-└──────────────┬──────────────┘       └──────────────┬──────────────┘
-               │ serves UI                         │ login + tokens
-               ▼                                   ▼
+┌───────────────────────────────┐     ┌──────────────────────────────┐
+│ React/Vite browser            │  ⇄  │ Cognito user pool            │
+│ Local now · Pages planned     │     │ Sign-in + department groups  │
+└───────────────────────────────┘     └──────────────────────────────┘
+                │ Question + Cognito access token
+                ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ Browser · department workspace · chat · source citations          │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │ HTTPS request + access token
-                               ▼
+│ API Gateway HTTP API · validate JWT                              │
+│ Knowledge Lambda · derive access from cognito:groups             │
+│                                                                  │
+│ Input PII check → FastEmbed query vector                         │
+│                          ↓                                       │
+│ Qdrant search · department filter → permitted chunks             │
+│                          ↓                                       │
+│ Mask source PII → system instructions + chunks + question        │
+│                          ↓                                       │
+│ Groq LLM → output PII check + validate citations → answer        │
+└──────────────────────────────────────────────────────────────────┘
+        │ Provider credentials          │ Safe telemetry
+        ▼                               ▼
+┌─────────────────────────────┐  ┌─────────────────────────────────┐
+│ SSM Parameter Store         │  │ CloudWatch Logs                 │
+│ SecureString · backend only │  │ Tokens · latency · guardrails   │
+└─────────────────────────────┘  │ Model cost estimate · 7 days    │
+                                 └─────────────────────────────────┘
+
 ┌──────────────────────────────────────────────────────────────────┐
-│ AWS API Gateway → JWT validation → Python Lambda                  │
-│ Input guardrail → FastEmbed → department retrieval → Groq         │
-│ Output guardrail → validated citations → response                 │
-└─────┬──────────────┬──────────────┬──────────────┬──────────────────┘
-      │              │              │              │
-      ▼              ▼              ▼              ▼
-┌──────────┐  ┌────────────┐  ┌────────────┐  ┌─────────────────────┐
-│ Qdrant   │  │ Groq API   │  │ CloudWatch │  │ AWS Secrets Manager │
-│ Vectors  │  │ Inference  │  │ Metadata   │  │ Backend API keys    │
-└────▲─────┘  └────────────┘  └────────────┘  └─────────────────────┘
-     │ embedded chunks
-┌────┴─────────────────────────────────────────────────────────────┐
-│ Private S3 documents → EventBridge → ingestion Lambda → FastEmbed │
-│ Approved source files are returned through expiring S3 links.     │
+│ Private S3 Markdown → EventBridge → ingestion Lambda             │
+│ Chunk text + department metadata → FastEmbed → Qdrant vectors    │
+│ Both Lambdas use /tmp for FastEmbed/Hugging Face caches.         │
+│ Authorized source links use short-lived S3 presigned URLs.       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 Pages serves static assets without a Docker container. Keep provider keys in the backend secret store; all `VITE_*` configuration is visible in the browser bundle. Cloudflare's static asset requests are free and unlimited, subject to other platform limits; AWS and external providers have separate charges. See [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and [Cloudflare setup](#cloudflare-pages-setup).
+
+## RAG pipeline
+
+![KnowledgeLLM RAG pipeline: a question passes PII checks, FastEmbed creates a query vector, Qdrant retrieves department-permitted chunks, and Groq generates an answer checked for PII and valid citations. A separate S3 ingestion flow indexes document chunks.](docs/design/architecture/knowledgellm-rag-pipeline.png)
+
+1. **Authorize:** Cognito signs in the user; API Gateway validates the JWT. The backend derives Finance, Operations, or People access from verified group claims.
+2. **Retrieve:** reject questions containing recognized PII patterns, embed the question with FastEmbed (`all-MiniLM-L6-v2`), and search Qdrant with department filters. The backend also checks retrieved document IDs against its approved catalog.
+3. **Generate:** mask recognized PII in retrieved text; send system instructions, permitted excerpts, and the question to Groq (`gpt-oss-20b`).
+4. **Return:** block PII in output and accept only citations to approved retrieved sources. Unsupported questions return a no-information response; provider failures return a service error.
+5. **Observe:** return the guardrail outcome and model usage to the UI, and log metadata to CloudWatch without question, answer, or source text. The displayed dollar value is a token-based estimate, not an invoice or the total AWS bill.
+
+Ingestion runs separately when approved Markdown files are created in S3. It chunks text, attaches department/source metadata, embeds it, and replaces that document's vectors in Qdrant. Query-time embedding and document embedding use the same model. The three chunks in the illustration are examples; retrieval requests up to five matches.
 
 ## Local development
 
@@ -70,15 +87,15 @@ python -m pip install -e '.[dev]'
 python -m pytest
 ```
 
-The frontend starts without credentials but disables sign-in. Copy `web/.env.example` to `web/.env.local` and set `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI` from the deployed stack outputs. Cognito managed login receives the username and password; the app never handles or stores the password. Account switching signs out, clears the current workspace, and requires a fresh login.
+The frontend supports public Cognito configuration from environment variables; the current demo also includes deployed public endpoint defaults. Copy `web/.env.example` to `web/.env.local` and set `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI` from the deployed stack outputs. The current demo persona buttons sign in through Cognito password authentication and clear the previous workspace when switching. Managed login with authorization code and PKCE is also supported. Demo account credentials shipped in browser code are visible to users; use interactive sign-in for a production deployment. Provider API keys belong only in the backend.
 
 ## AWS prototype setup with Terraform
 
 Both Lambda functions configure `FASTEMBED_CACHE_PATH=/tmp/fastembed`, `HF_HOME=/tmp/huggingface`, and `HF_HUB_CACHE=/tmp/huggingface/hub`. FastEmbed also receives an explicit writable cache directory in code. This avoids model downloads writing to Lambda's read-only filesystem; caches are temporary per execution environment. Rebuild the Lambda package and apply the reviewed Terraform change before checking ingestion again. See [AWS ephemeral storage documentation](https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html).
 
-☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The web client uses authorization code with PKCE and has no client secret. Protected API routes require the `openid` scope and accept Cognito access tokens only. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
+☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The Cognito app client has no client secret and supports the demo password flow and authorization code with PKCE. API Gateway validates JWTs; protected routes leave required OAuth scopes unset so Cognito password-flow access tokens can be used. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
 
-Create Qdrant and Groq credentials outside the repository and save each in AWS Secrets Manager. To use a secure remote S3 backend for Terraform state in Singapore (`ap-southeast-1`), run the one-time bootstrap setup first:
+Create Qdrant and Groq credentials outside the repository. The deployed Terraform stack stores them in standard SSM Parameter Store `SecureString` parameters. Supply values through ignored configuration or an approved deployment environment; never put keys in frontend variables. Existing secret identifiers can also be supplied through the configuration variables. To use a secure remote S3 backend for Terraform state in Singapore (`ap-southeast-1`), run the one-time bootstrap setup first:
 
 ```sh
 rtk terraform -chdir=infra/bootstrap init
@@ -102,11 +119,11 @@ Set `cognito_domain_prefix` to a globally unique lowercase value and set the web
 rtk terraform -chdir=infra/terraform output
 ```
 
-After deployment, upload only the fictional samples to the `documents_bucket_name` output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. Ingestion creates Qdrant keyword indexes for `department` and `document_id` before replacing filtered records. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `groq_input_rate_per_million_usd` and `groq_output_rate_per_million_usd` from current pricing to show cost estimates; otherwise cost is reported as unavailable. Terraform resources and provider usage can still incur charges, including Cognito domain, S3 storage, Lambda, API Gateway, and Secrets Manager. `terraform destroy` removes the managed AWS resources; versioned bucket objects must be removed before destroy.
+After deployment, upload only the fictional samples to the `documents_bucket_name` output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. Ingestion creates Qdrant keyword indexes for `department` and `document_id` before replacing filtered records. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `groq_input_rate_per_million_usd` and `groq_output_rate_per_million_usd` from current pricing to show cost estimates; otherwise cost is reported as unavailable. Terraform resources and provider usage can still incur charges, including S3 storage, Lambda, API Gateway, Cognito usage, and external providers. `terraform destroy` removes the managed AWS resources; versioned bucket objects must be removed before destroy.
 
 Track deployment and demo progress in the [implementation plan](docs/superpowers/plans/2026-10-06-knowledgellm-full-stack-prototype.md#deployment-and-demo-checklist). The Terraform-managed private Lambda artifact bucket is temporary deployment storage and is force-removed during `terraform destroy`; keep its contents limited to the built code package.
 
-Before provisioning, review account-specific allowances and current provider terms: [Cognito](https://aws.amazon.com/cognito/pricing/), [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/), [S3](https://aws.amazon.com/s3/faqs/), [Secrets Manager](https://aws.amazon.com/secrets-manager/pricing/), [Qdrant](https://qdrant.tech/pricing/), [Groq rate limits](https://console.groq.com/docs/rate-limits), and [Groq data handling](https://console.groq.com/docs/your-data). Check CloudWatch pricing in the observability section below.
+Before provisioning, review account-specific allowances and current provider terms: [Cognito](https://aws.amazon.com/cognito/pricing/), [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/), [S3](https://aws.amazon.com/s3/faqs/), [Systems Manager](https://aws.amazon.com/systems-manager/pricing/), [Qdrant](https://qdrant.tech/pricing/), [Groq rate limits](https://console.groq.com/docs/rate-limits), and [Groq data handling](https://console.groq.com/docs/your-data). Check CloudWatch pricing in the observability section below.
 
 ## Cloudflare Pages setup
 
@@ -129,6 +146,8 @@ Cloudflare is configured separately from the AWS Terraform stack. Check [Pages l
 6. For a custom domain, add it under the Pages project's Custom domains settings and complete the [required DNS setup](https://developers.cloudflare.com/pages/configuration/custom-domains/). When changing domains, update Terraform CORS/callback/logout URLs and the Pages redirect variable, rebuild, and repeat login checks. Preview URLs need separately allowed URLs; the current stack accepts one configured origin/callback/logout URL.
 
 ## Chat observability
+
+The PII monitor shows the last backend outcome: **No PII detected**, **Question PII blocked**, **Answer PII blocked**, or **Source PII masked**. It distinguishes pending checks, failed requests, and missing results. These are basic pattern checks, not comprehensive personal-data detection. Five department-specific question buttons fill the composer without submitting.
 
 📊 Chat telemetry is written as structured metadata to the Terraform output `knowledge_log_group_name`: token counts, estimated model cost, latency, department, retrieved count, and guardrail outcome. It does not log questions, answers, or source text. Terraform sets log retention to seven days and creates no custom metrics or paid dashboards. AWS currently includes 5 GB/month for CloudWatch Logs ingestion, archive storage, and Logs Insights scan data, but this allowance is shared across the account and is not a guarantee of a $0 bill. Review current regional pricing and set AWS billing alerts before deployment. [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/).
 
