@@ -29,9 +29,12 @@ The prototype models three representative enterprise identities:
 
 ### 3.2 Department Folders & File Navigation
 * **Permission Locks**: Unauthorized department folders display a lock icon (`LockKeyhole`) and are disabled.
-* **Automatic Unlocking**: When a persona signs in, the lock icon on their authorized folder disappears, revealing the document count badge (e.g., `2`).
-* **Auto-Expansion**: The permitted department folder automatically expands, listing authorized documents.
-* **Accordion Controls**: Users can click the folder header to collapse or expand the file list.
+* **Automatic Unlocking Across All Personas**:
+  - When clicking **Sam** (`operations`), the lock icon on the Operations folder MUST disappear, revealing the document count badge (e.g., `2`), and the folder must auto-expand with operations files (`Runbook & procedures`, `Service handoff`).
+  - When clicking **Alex** (`finance`), the lock icon on the Finance folder MUST disappear, revealing the document count badge (e.g., `2`), and the folder must auto-expand with finance files (`Q4 budget overview`, `Expense policy`).
+  - When clicking **Priya** (`people`), the lock icon on the People folder MUST disappear, revealing the document count badge (e.g., `2`), and the folder must auto-expand with people files (`Employee handbook`, `Leave policy`).
+* **Dynamic State Transition**: When switching from one persona to another, the previous department folder re-locks with the lock icon, while the newly authenticated persona's folder unlocks instantly without requiring a page refresh.
+* **Accordion Controls**: Users can click the unlocked folder header to extend or collapse the file list at any time.
 * **Document Inspection**: Clicking a document opens a presigned, short-lived S3 view URL in a secure tab.
 
 ### 3.3 Grounded Cited Chat & Guardrails
@@ -102,6 +105,9 @@ The prototype models three representative enterprise identities:
 
 - [x] All 3 personas authenticate with 1 click without credentials popup.
 - [x] Toast notification displays `${name} signed in successfully` with department accent color.
+- [x] Clicking Sam (Operations) reliably unlocks Operations folder, removes lock icon, and reveals operations documents.
+- [x] Clicking Alex (Finance) reliably unlocks Finance folder, removes lock icon, and reveals finance documents.
+- [x] Clicking Priya (People) reliably unlocks People folder, removes lock icon, and reveals people documents.
 - [x] Lock icon disappears only for permitted folder; other folders remain locked.
 - [x] Permitted folder auto-expands on sign-in and shows authorized files.
 - [x] Documents can be extended/collapsed manually.

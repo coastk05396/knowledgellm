@@ -56,6 +56,9 @@ Do not hardcode API keys, passwords, tokens, or other credentials. Keep local co
 - [x] ~~Implement 1-click persona switching (Alex / Finance, Sam / Operations, Priya / People) with zero popups~~
 - [x] ~~Add floating toast notification on persona switch (`${name} signed in successfully · ${dept} folder unlocked`)~~
 - [x] ~~Hide lock icon and reveal document count badge on authorized department folder~~
+- [x] ~~Ensure clicking Sam (Operations) reliably unlocks Operations folder, removes lock icon, and displays files~~
+- [x] ~~Ensure clicking Alex (Finance) reliably unlocks Finance folder, removes lock icon, and displays files~~
+- [x] ~~Ensure clicking Priya (People) reliably unlocks People folder, removes lock icon, and displays files~~
 - [x] ~~Auto-expand authorized department folder upon login with files immediately visible~~
 - [x] ~~Support accordion toggle to manually expand/collapse department files~~
 - [x] ~~Implement document inspection via short-lived presigned S3 URLs in a new tab~~
