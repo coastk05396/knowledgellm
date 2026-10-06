@@ -1,12 +1,29 @@
-import {
-  FileText,
-  MessageSquare,
-  Plus,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { FileText, MessageSquare, Plus, Sparkles } from "lucide-react";
 import type { ChatAnswer, Department } from "../app/api";
 import { identities } from "./IdentityPicker";
+const suggestedQuestions: Record<Department, readonly string[]> = {
+  finance: [
+    "What is the total approved Q4 budget?",
+    "What changed in the Q4 budget?",
+    "Which flight classes are allowed?",
+    "What is the hotel allowance per night?",
+    "When must expense reports be submitted?",
+  ],
+  operations: [
+    "How quickly must a P1 incident be acknowledged?",
+    "How often should P1 status updates be posted?",
+    "Who handles on-call escalation?",
+    "What must be included in a shift handoff?",
+    "When are routine maintenance windows scheduled?",
+  ],
+  people: [
+    "How many vacation days do employees receive?",
+    "How many unused vacation days can carry over?",
+    "What is the annual education budget?",
+    "What is the home office allowance?",
+    "How much parental leave is available?",
+  ],
+};
 export interface Message {
   question: string;
   response: ChatAnswer;
@@ -19,6 +36,7 @@ export function ChatPanel({
   onNew,
   onOpen,
   signedIn,
+  onSuggestion,
 }: {
   name: string;
   departments: Department[];
@@ -27,6 +45,7 @@ export function ChatPanel({
   onNew: () => void;
   onOpen: (id: string) => void;
   signedIn: boolean;
+  onSuggestion: (question: string) => void;
 }) {
   const access = identities
     .filter((person) => departments.includes(person.department))
@@ -52,40 +71,27 @@ export function ChatPanel({
         </button>
       </div>
       <section className="conversation" aria-label="Conversation">
-        <div className={`intro ${departments[0] ?? "finance"}`}>
-          <p className="eyebrow">
-            <span className="status-dot" />
-            {signedIn ? "Active identity" : "Secure workspace"} /{" "}
-            {access || "Sign-in required"}
-          </p>
-          <h1 className="identity-title">
-            {signedIn
-              ? `${name.split(" ")[0]} ↔ ${access || "No access"}`
-              : "Your knowledge. Your access."}
-          </h1>
-          <p className="intro-copy">
-            <span className="desktop-copy">
-              {signedIn
-                ? `KnowledgeLLM answers from ${access || "permitted"} documents that ${name.split(" ")[0]} is permitted to view. Sign in with a different account to switch departments.`
-                : "Sign in to browse your department's documents and get answers backed by the sources you can access."}
-            </span>
-            <span className="mobile-copy">
-              {signedIn
-                ? `Answers use only ${access} files ${name.split(" ")[0]} can access.`
-                : "Sign in to browse your permitted department files."}
-            </span>
-          </p>
-          <div className="badges">
-            <span className="department-badge">
-              <FileText size={18} />
-              {access || "Department documents"}
-            </span>
-            <span className="permission-badge">
-              <ShieldCheck size={18} />
-              Permission-aware
-            </span>
-          </div>
-        </div>
+        {departments.map((department) => (
+          <section
+            key={department}
+            className={`question-suggestions ${department}`}
+            aria-label={`${identities.find((person) => person.department === department)?.label} suggested questions`}
+          >
+            <h3>Try a question</h3>
+            <div className="suggestion-buttons">
+              {suggestedQuestions[department].map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onSuggestion(question)}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
         <div className="message-list" aria-live="polite">
           {messages.map((message, index) => (
             <div key={index} className="exchange">

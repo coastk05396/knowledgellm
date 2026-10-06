@@ -31,10 +31,14 @@ export function Workspace({
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
+  const [suggestion, setSuggestion] = useState<{ question: string } | null>(
+    null,
+  );
   const [cost, setCost] = useState<number | null>(null);
   useEffect(() => {
     let active = true;
     setDocuments([]);
+    setSuggestion(null);
     setMessages([]);
     setCost(null);
     setError(null);
@@ -125,6 +129,7 @@ export function Workspace({
   };
   const switchAccount = (department?: string) => {
     setDocuments([]);
+    setSuggestion(null);
     setMessages([]);
     setCost(null);
     setError(null);
@@ -164,7 +169,9 @@ export function Workspace({
           signedIn={Boolean(session)}
           messages={messages}
           busy={busy}
+          onSuggestion={(question) => setSuggestion({ question })}
           onNew={() => {
+            setSuggestion(null);
             setMessages([]);
             setCost(null);
             setError(null);
@@ -209,6 +216,7 @@ export function Workspace({
         </div>
         <Composer
           onSend={send}
+          suggestion={suggestion}
           disabled={!session || loading || !documents.length}
           busy={busy}
           name={name.split(" ")[0]}

@@ -1073,3 +1073,39 @@ h2 {
     scroll-behavior: auto !important;
   }
 }
+
+.question-suggestions {
+  margin-bottom: 28px;
+}
+.question-suggestions h3 {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.suggestion-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.suggestion-buttons button {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--accent);
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.suggestion-buttons button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.suggestion-buttons button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.suggestion-buttons button:disabled {
+  opacity: 0.5;
+}

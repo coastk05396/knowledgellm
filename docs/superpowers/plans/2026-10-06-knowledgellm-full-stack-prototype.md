@@ -223,3 +223,14 @@ The UI monitor currently waits for a successful chat response: failed requests l
 - [x] Capture the [live chat and monitor preview](../../design/verification/2026-10-06-live-chat-monitor.png).
 
 The earlier pending cache deployment is now completed. Direct invocation verifies ingestion; the S3/EventBridge trigger was previously confirmed and was not retriggered by rewriting documents. Live checks above cover Finance and input PII refusal; output PII and full cross-department chat verification remain separate acceptance checks. Changes are submitted in [PR #5](https://github.com/coastk05396/knowledgellm/pull/5); no merge was performed.
+
+### Department question shortcuts
+
+- [x] Remove the identity introduction and permission badges shown in Rick's screenshots.
+- [x] Provide five document-based question buttons for each of Finance, Operations, and People, visible only with matching document access.
+- [x] Fill and focus the composer on selection without submitting; clear the selected draft on account switch or New chat. Disable suggestions while an answer is pending.
+- [x] Production TypeScript/Vite build passes. Update the existing intro-copy expectation for the new UI; no tests were added or run for this change.
+
+This frontend change builds on PR #5 and does not modify AWS infrastructure.
+
+Previews: [desktop](../../design/verification/2026-10-06-question-shortcuts-desktop.png) and [mobile](../../design/verification/2026-10-06-question-shortcuts-mobile.png). Formatting checks pass for the changed frontend files.

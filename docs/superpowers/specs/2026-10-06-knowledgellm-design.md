@@ -100,3 +100,7 @@ Minimize demo costs by using eligible service allowances; an indefinite $0 bill 
 - **Cost status:** The source document's historical free-tier amounts are not treated as current pricing. Verify exact regional/service costs and third-party terms during implementation planning.
 - **Data status:** Use synthetic documents for initial acceptance. Any move to real confidential documents requires an explicit review of inference-provider retention, region, and data-processing terms.
 - **Department mapping:** Use Finance, Operations, and People from the supplied screenshots as Cognito groups; confirm exact sample-document content during implementation.
+
+## Department question shortcuts
+
+Replace the chat identity heading, explanatory paragraph, and department/permission badges with five document-based question buttons for the authorized department. Clicking a button fills and focuses the composer without sending. Suggestions change with department access; switching accounts or starting a new chat clears the selected draft.
