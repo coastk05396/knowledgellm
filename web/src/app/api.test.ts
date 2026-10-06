@@ -7,6 +7,51 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Knowledge API boundary", () => {
+  it.each(["hit", "miss", "bypass"])(
+    "preserves cache status %s and zero inference cost",
+    async (status) => {
+      appConfig.apiUrl = "https://api.example.com";
+      vi.stubGlobal(
+        "fetch",
+        async () =>
+          new Response(
+            JSON.stringify({
+              answer: "Authorized answer",
+              citations: [],
+              cache_status: status,
+              cost_usd: 0,
+            }),
+          ),
+      );
+      const result = await knowledgeApi.askQuestion(
+        "access-token",
+        "What changed?",
+      );
+      expect(result.cache_status).toBe(status);
+      expect(result.cost_usd).toBe(0);
+    },
+  );
+  it.each(["unknown", ["hit"], null])(
+    "ignores invalid cache status %j",
+    async (status) => {
+      appConfig.apiUrl = "https://api.example.com";
+      vi.stubGlobal(
+        "fetch",
+        async () =>
+          new Response(
+            JSON.stringify({
+              answer: "Authorized answer",
+              citations: [],
+              cache_status: status,
+            }),
+          ),
+      );
+      expect(
+        (await knowledgeApi.askQuestion("access-token", "What changed?"))
+          .cache_status,
+      ).toBeUndefined();
+    },
+  );
   it("sends only the question with a bearer token", async () => {
     appConfig.apiUrl = "https://api.example.com/";
     let sentUrl = "";

@@ -8,9 +8,9 @@ KnowledgeLLM has two architecture options. **Option A is the current cost-consci
 
 ### Option A — Cost-conscious demo
 
-The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs locally today; Cloudflare Pages with a custom domain is planned. FastEmbed runs on Lambda CPU, Qdrant stores department-tagged vectors, and Groq generates grounded answers. The application owns chunking, access filters, PII patterns, and citation validation.
+The AWS backend targets Singapore (`ap-southeast-1`). React/Vite runs locally today; Cloudflare Pages with a custom domain is planned. This revision replaces local embedding downloads with Bedrock Cohere multilingual v3, keeps department-tagged vectors in Qdrant, and keeps Groq generation. DynamoDB can share answers for the 15 fixed demo questions. The migration is prepared but not deployed; caching defaults to disabled. Follow the [staged rollout and rollback guide](docs/cohere-demo-cache-operations.md) before switching the existing deployment.
 
-![Hand-drawn KnowledgeLLM demo architecture: Cognito Custom Auth, FastEmbed, department-filtered Qdrant retrieval, Groq, and separate S3 ingestion.](docs/design/architecture/knowledgellm-rag-pipeline.webp)
+![Historical KnowledgeLLM architecture before the Cohere and DynamoDB migration.](docs/design/architecture/knowledgellm-rag-pipeline.webp)
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -32,8 +32,8 @@ The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs loc
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ 03  RAG · Lambda orchestrates the request                                  │
 │                                                                            │
-│ Input PII check → FastEmbed query vector (Lambda CPU)                      │
-│ Qdrant Cloud [external] → department-filtered source chunks                │
+│ Input PII + S3 index-version checks → scoped DynamoDB demo-answer cache    │
+│ Cache miss → Bedrock Cohere query vector → filtered Qdrant source chunks  │
 │ Mask source PII → grounded prompt → Groq [external] LLM                    │
 │ Output PII + citation checks → answer + sources + guardrail status         │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -42,7 +42,8 @@ The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs loc
 │ 04  INGESTION · separate event-driven flow                                 │
 │                                                                            │
 │ Private S3 Markdown → EventBridge → ingestion Lambda                       │
-│ Chunk + department metadata → FastEmbed → Qdrant Cloud vectors             │
+│ Chunk + immutable S3 version → Cohere → Qdrant versioned vectors          │
+│ Completed writes → S3 index completion manifests                          │
 └────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -50,15 +51,15 @@ The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs loc
 │                                                                            │
 │ SSM Parameter Store SecureString → backend provider keys                   │
 │ CloudWatch Logs → tokens, latency, guardrail outcome, cost estimates       │
-│ FastEmbed / Hugging Face caches → writable /tmp in each Lambda             │
+│ DynamoDB → fixed demo answers with checked 24-hour expiry                 │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Why this design:** reuse provider free allowances, perform embeddings without a paid embedding API, and use event-driven compute with short log retention. [Qdrant offers a prototype free tier](https://qdrant.tech/pricing/); [Groq publishes Free-plan limits](https://console.groq.com/docs/rate-limits). AWS eligibility, quotas, storage, and account usage still affect billing. This is a low-cost target, not a guaranteed $0 deployment. The monitor's dollar value is an estimated inference cost, not a charge or the total AWS bill.
+**Why this design:** avoid per-Lambda embedding downloads, reuse validated demo answers across execution environments, and use event-driven compute with short log retention. Bedrock invocations and DynamoDB requests have usage costs. [Qdrant offers a prototype free tier](https://qdrant.tech/pricing/); [Groq publishes Free-plan limits](https://console.groq.com/docs/rate-limits). AWS eligibility, quotas, storage, and account usage still affect billing. This is a low-cost target, not a guaranteed $0 deployment. The monitor's dollar value is an estimated inference cost, not a charge or the total AWS bill.
 
 ### Option B — All-AWS managed reference
 
-**Proposed only.** Host React on Amplify, authenticate with Cognito, and keep orchestration in Lambda. Replace FastEmbed with Titan Text Embeddings V2, Qdrant with OpenSearch Serverless, and Groq with an Amazon Nova model on Bedrock. Knowledge Bases manages document parsing/chunking and retrieval; Step Functions plus Lambda starts and monitors ingestion jobs. [Amplify hosting](https://aws.amazon.com/amplify/hosting/), [Titan embeddings](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-titan-text-embeddings-v2.html).
+**Proposed only.** Host React on Amplify, authenticate with Cognito, and keep orchestration in Lambda. Replace Cohere with Titan Text Embeddings V2, Qdrant with OpenSearch Serverless, and Groq with an Amazon Nova model on Bedrock. Knowledge Bases manages document parsing/chunking and retrieval; Step Functions plus Lambda starts and monitors ingestion jobs. [Amplify hosting](https://aws.amazon.com/amplify/hosting/), [Titan embeddings](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-titan-text-embeddings-v2.html).
 
 ![Proposed, undeployed all-AWS KnowledgeLLM architecture with AWS service icons and separate frontend, API, managed RAG, ingestion, and security component boundaries.](docs/design/architecture/knowledgellm-all-aws-architecture.webp)
 
@@ -119,7 +120,8 @@ The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs loc
 | Backend | Python 3.12 Lambda | Lambda orchestration |
 | Document storage | Private S3 | Private S3 + document metadata |
 | Ingestion | EventBridge + Lambda chunking | EventBridge + Step Functions/Lambda + Knowledge Bases |
-| Embeddings | FastEmbed / all-MiniLM-L6-v2 on CPU | Bedrock Titan Text Embeddings V2 |
+| Embeddings | Bedrock Cohere multilingual v3 (1024 dimensions) | Bedrock Titan Text Embeddings V2 |
+| Demo answer cache | DynamoDB, exact 15 questions, checked 24-hour expiry | Not specified |
 | Retrieval | Qdrant Cloud + department filters | Knowledge Bases + OpenSearch Serverless + filters |
 | Generation | Groq / gpt-oss-20b | Bedrock / Amazon Nova Pro (example) |
 | Privacy | Application regex checks / masking | Bedrock Guardrails + application validation |
@@ -178,7 +180,7 @@ One small, standalone Lambda handles the three Cognito challenge triggers. It ac
 
 ## AWS prototype setup with Terraform
 
-Both Lambda functions configure `FASTEMBED_CACHE_PATH=/tmp/fastembed`, `HF_HOME=/tmp/huggingface`, and `HF_HUB_CACHE=/tmp/huggingface/hub`. FastEmbed also receives an explicit writable cache directory in code. This avoids model downloads writing to Lambda's read-only filesystem; caches are temporary per execution environment. Rebuild the Lambda package and apply the reviewed Terraform change before checking ingestion again. See [AWS ephemeral storage documentation](https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html).
+Both Lambda functions invoke `cohere.embed-multilingual-v3` in Singapore and use the separate `knowledgellm-cohere-v3` collection. The package excludes FastEmbed/ONNX. Preserve the previous deployed ZIP and collection as rollback points. The [migration guide](docs/cohere-demo-cache-operations.md) requires creating and verifying the new index before switching chat; rebuilding alone does not migrate documents. Enable the answer cache only after validation.
 
 ☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The Cognito app client has no client secret and supports custom demo authentication and authorization code with PKCE. API Gateway validates JWTs; protected routes leave required OAuth scopes unset so Cognito password-flow access tokens can be used. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
 
@@ -206,7 +208,7 @@ Set `cognito_domain_prefix` to a globally unique lowercase value and set the web
 rtk terraform -chdir=infra/terraform output
 ```
 
-After deployment, upload only the fictional samples to the `documents_bucket_name` output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. Ingestion creates Qdrant keyword indexes for `department` and `document_id` before replacing filtered records. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `groq_input_rate_per_million_usd` and `groq_output_rate_per_million_usd` from current pricing to show cost estimates; otherwise cost is reported as unavailable. Terraform resources and provider usage can still incur charges, including S3 storage, Lambda, API Gateway, Cognito usage, and external providers. `terraform destroy` removes the managed AWS resources; versioned bucket objects must be removed before destroy.
+After an approved deployment, upload only fictional samples to the `documents_bucket_name` output, preserving department folders. S3 sends department object-created events through EventBridge to ingestion. Ingestion embeds immutable versions with Cohere, creates Qdrant indexes for `department`, `document_id`, and `source_version_id`, and writes S3 completion manifests after successful indexing. Chat checks current versions, applies department/version filters, and validates Groq citations. Exact demo questions can use DynamoDB; custom questions bypass answer storage. Set both Groq token rates from current pricing to show inference estimates; cache hits report zero new generation tokens/cost. AWS and external services can still incur charges. `terraform destroy` removes managed AWS resources; versioned bucket objects must be removed before destroy.
 
 Track deployment and demo progress in the [PROMTS.md](PROMTS.md#deployment-and-demo-checklist). The Terraform-managed private Lambda artifact bucket is temporary deployment storage and is force-removed during `terraform destroy`; keep its contents limited to the built code package.
 

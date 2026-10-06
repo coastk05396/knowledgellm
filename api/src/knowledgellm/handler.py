@@ -4,9 +4,14 @@ import logging
 import os
 import time
 from collections.abc import Mapping
+from functools import lru_cache
 
 from knowledgellm.authz import departments_for_claims
-from knowledgellm.chat import Generator, Retriever, answer_question
+from knowledgellm.chat import Generator, Retriever, validate_question
+from knowledgellm.answer_cache import create_answer_cache
+from knowledgellm.cached_chat import answer_with_cache
+from knowledgellm.index_versions import S3IndexVersions
+from knowledgellm.request_budget import chat_deadline
 from knowledgellm.documents import (
     AuthorizationError,
     S3DocumentStorage,
@@ -31,6 +36,12 @@ def create_chat_services() -> tuple[Retriever, Generator]:
     from knowledgellm.providers import create_chat_services as create_services
 
     return create_services()
+
+
+@lru_cache(maxsize=1)
+def create_index_versions() -> S3IndexVersions | None:
+    bucket = os.getenv("DOCUMENTS_BUCKET")
+    return S3IndexVersions(bucket) if bucket else None
 
 
 def _question_from_event(event: Mapping[str, object]) -> str | None:
@@ -101,8 +112,19 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
             )
             return _response(400, {"error": "invalid_question"})
         try:
-            retriever, generator = create_chat_services()
-            result = answer_question(question, departments, retriever, generator, BasicGuardrails())
+            guardrails = BasicGuardrails()
+            result = validate_question(question, departments, guardrails)
+            if result is None:
+                remaining = getattr(context, "get_remaining_time_in_millis", None)
+                seconds = remaining() / 1000 - 2 if callable(remaining) else 25
+                with chat_deadline(seconds):
+                    try:
+                        cache = create_answer_cache()
+                    except Exception:
+                        logger.info("answer_cache_unavailable operation=initialize")
+                        cache = None
+                    result = answer_with_cache(question, departments, create_chat_services,
+                                               guardrails, cache, create_index_versions())
         except Exception:
             _log_chat_telemetry(
                 request_id, department, started_at, status="assistant_unavailable", guardrail_action="error"
@@ -125,6 +147,8 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
             output_tokens=result.usage.output_tokens if result.usage else 0,
             estimated_cost_usd=result.usage.cost_usd if result.usage else None,
             model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+            cache_status=result.cache_status,
+            stage_timings_ms=result.stage_timings_ms,
         )
         return _response(
             200,
@@ -137,6 +161,7 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
                 "usage": usage,
                 "cost_usd": cost,
                 "guardrail_action": result.guardrail_action,
+                "cache_status": result.cache_status,
             },
         )
 
@@ -156,6 +181,8 @@ def _log_chat_telemetry(
     output_tokens: int = 0,
     estimated_cost_usd: float | None = None,
     model: str | None = None,
+    cache_status: str = "bypass",
+    stage_timings_ms: Mapping[str, float] | None = None,
 ) -> None:
     logger.info(
         json.dumps(
@@ -171,6 +198,8 @@ def _log_chat_telemetry(
                 "output_tokens": output_tokens,
                 "estimated_cost_usd": estimated_cost_usd,
                 "model": model,
+                "cache_status": cache_status,
+                "stage_timings_ms": dict(stage_timings_ms or {}),
                 "latency_ms": round((time.perf_counter() - started_at) * 1000),
             },
             separators=(",", ":"),

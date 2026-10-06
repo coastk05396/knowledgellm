@@ -26,6 +26,7 @@ export interface ChatAnswer {
   usage?: { total_tokens?: number };
   cost_usd?: number;
   guardrail_action?: GuardrailAction;
+  cache_status?: "hit" | "miss" | "bypass";
 }
 export interface KnowledgeApi {
   loadDocuments(token: string): Promise<DocumentSummary[]>;
@@ -91,6 +92,10 @@ export const knowledgeApi: KnowledgeApi = {
     });
     return {
       answer: data.answer,
+      ...(typeof data.cache_status === "string" &&
+      ["hit", "miss", "bypass"].includes(data.cache_status)
+        ? { cache_status: data.cache_status as "hit" | "miss" | "bypass" }
+        : {}),
       citations,
       ...(isGuardrailAction(data.guardrail_action)
         ? { guardrail_action: data.guardrail_action }

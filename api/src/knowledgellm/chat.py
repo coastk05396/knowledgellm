@@ -1,6 +1,9 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal, Protocol
+
+if TYPE_CHECKING:
+    from knowledgellm.index_versions import IndexSnapshot
 
 from knowledgellm.authz import ALLOWED_DEPARTMENTS
 from knowledgellm.documents import document_for_id, list_documents
@@ -39,16 +42,37 @@ class ChatAnswer:
     guardrail_action: str = "pass"
     retrieved_count: int = 0
     redacted_source_count: int = 0
+    cache_status: Literal["hit", "miss", "bypass"] = "bypass"
+    cacheable: bool = False
+    stage_timings_ms: dict[str, float] = field(default_factory=dict)
 
 
 class Retriever(Protocol):
     def search(self, question: str, departments: frozenset[str]) -> list[RetrievedChunk]: ...
 
 
+class VersionedRetriever(Retriever, Protocol):
+    def search_snapshot(
+        self, question: str, departments: frozenset[str], snapshot: "IndexSnapshot",
+    ) -> list[RetrievedChunk]: ...
+
+
 class Generator(Protocol):
     def generate(
         self, question: str, chunks: Sequence[RetrievedChunk]
     ) -> tuple[str, list[str], Usage | None]: ...
+
+
+def validate_question(
+    question: str, departments: frozenset[str], guardrails: Guardrails,
+) -> ChatAnswer | None:
+    if not departments & ALLOWED_DEPARTMENTS:
+        return ChatAnswer("Your account does not have access to department documents.", (), guardrail_action="access_denied")
+    if not question.strip() or len(question) > 4000:
+        return ChatAnswer("Enter a question of 1 to 4,000 characters.", (), guardrail_action="invalid_question")
+    if guardrails.contains_pii(question):
+        return ChatAnswer(PII_REFUSAL, (), guardrail_action="question_pii_blocked")
+    return None
 
 
 def answer_question(
@@ -59,12 +83,9 @@ def answer_question(
     guardrails: Guardrails,
 ) -> ChatAnswer:
     authorized = departments & ALLOWED_DEPARTMENTS
-    if not authorized:
-        return ChatAnswer("Your account does not have access to department documents.", (), guardrail_action="access_denied")
-    if not question.strip() or len(question) > 4000:
-        return ChatAnswer("Enter a question of 1 to 4,000 characters.", (), guardrail_action="invalid_question")
-    if guardrails.contains_pii(question):
-        return ChatAnswer(PII_REFUSAL, (), guardrail_action="question_pii_blocked")
+    refusal = validate_question(question, departments, guardrails)
+    if refusal is not None:
+        return refusal
 
     allowed_ids = {document.id for document in list_documents(authorized)}
     retrieved = retriever.search(question.strip(), authorized)
@@ -114,4 +135,6 @@ def answer_question(
         guardrail_action="source_pii_redacted" if redacted_source_count else "pass",
         retrieved_count=len(chunks),
         redacted_source_count=redacted_source_count,
+        cacheable=(answer.strip() != NO_SOURCES and all(doc_id in valid_ids for doc_id in cited_ids)
+                   and guardrails.redact(answer) == answer),
     )

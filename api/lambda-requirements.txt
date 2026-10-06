@@ -1,4 +1,3 @@
 # boto3 is provided by the AWS Lambda Python 3.12 runtime.
-fastembed>=0.7,<1
 groq>=0.31,<1
 qdrant-client>=1.14,<2

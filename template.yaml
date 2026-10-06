@@ -3,6 +3,11 @@ Transform: AWS::Serverless-2016-10-31
 Description: KnowledgeLLM permission-aware knowledge assistant prototype
 
 Parameters:
+  AnswerCacheEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable only after validating all migrated Cohere document versions
   DemoMode:
     Type: String
     Default: 'false'
@@ -59,8 +64,9 @@ Globals:
         DOCUMENTS_BUCKET: !Ref DocumentsBucket
         QDRANT_URL: !Ref QdrantUrl
         QDRANT_API_KEY_SECRET_ARN: !Ref QdrantApiKeySecretArn
-        QDRANT_COLLECTION: knowledgellm
-        EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+        QDRANT_COLLECTION: knowledgellm-cohere-v3
+        EMBEDDING_MODEL: cohere.embed-multilingual-v3
+        EMBEDDING_REGION: ap-southeast-1
         GROQ_API_KEY_SECRET_ARN: !Ref GroqApiKeySecretArn
         GROQ_MODEL: !Ref GroqModel
         GROQ_INPUT_RATE_PER_MILLION_USD: !Ref GroqInputRatePerMillionUsd
@@ -196,6 +202,22 @@ Resources:
         EventBridgeConfiguration:
           EventBridgeEnabled: true
 
+  AnswerCacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   KnowledgeApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -223,17 +245,28 @@ Resources:
     Properties:
       CodeUri: api/
       Handler: knowledgellm.handler.handler
+      Environment:
+        Variables:
+          ANSWER_CACHE_TABLE: !Ref AnswerCacheTable
+          ANSWER_CACHE_ENABLED: !Ref AnswerCacheEnabled
       Timeout: 28
       MemorySize: 1024
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref DocumentsBucket
         - Statement:
+            - Effect: Allow
+              Action: [s3:GetObject, s3:GetObjectVersion]
+              Resource: !Sub '${DocumentsBucket.Arn}/*'
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub 'arn:${AWS::Partition}:bedrock:ap-southeast-1::foundation-model/cohere.embed-multilingual-v3'
             - Effect: Allow
               Action: secretsmanager:GetSecretValue
               Resource:
                 - !Ref QdrantApiKeySecretArn
                 - !Ref GroqApiKeySecretArn
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem]
+              Resource: !GetAtt AnswerCacheTable.Arn
       Events:
         Health:
           Type: HttpApi
@@ -274,12 +307,19 @@ Resources:
       Timeout: 180
       MemorySize: 2048
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref DocumentsBucket
         - Statement:
+            - Effect: Allow
+              Action: [s3:GetObject, s3:GetObjectVersion]
+              Resource: !Sub '${DocumentsBucket.Arn}/*'
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub 'arn:${AWS::Partition}:bedrock:ap-southeast-1::foundation-model/cohere.embed-multilingual-v3'
             - Effect: Allow
               Action: secretsmanager:GetSecretValue
               Resource: !Ref QdrantApiKeySecretArn
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub '${DocumentsBucket.Arn}/_indexes/knowledgellm-cohere-v3/*'
       Events:
         ObjectCreated:
           Type: EventBridgeRule
@@ -293,6 +333,11 @@ Resources:
                 bucket:
                   name:
                     - !Ref DocumentsBucket
+                object:
+                  key:
+                    - prefix: finance/
+                    - prefix: operations/
+                    - prefix: people/
 
 Outputs:
   CognitoUserPoolId:
@@ -307,3 +352,5 @@ Outputs:
     Value: !Sub 'https://${KnowledgeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
   DocumentsBucketName:
     Value: !Ref DocumentsBucket
+  AnswerCacheTableName:
+    Value: !Ref AnswerCacheTable

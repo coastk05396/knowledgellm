@@ -1,29 +1,7 @@
 import { FileText, MessageSquare, Plus, Sparkles } from "lucide-react";
 import type { ChatAnswer, Department } from "../app/api";
 import { identities } from "./IdentityPicker";
-const suggestedQuestions: Record<Department, readonly string[]> = {
-  finance: [
-    "What is the total approved Q4 budget?",
-    "What changed in the Q4 budget?",
-    "Which flight classes are allowed?",
-    "What is the hotel allowance per night?",
-    "When must expense reports be submitted?",
-  ],
-  operations: [
-    "How quickly must a P1 incident be acknowledged?",
-    "How often should P1 status updates be posted?",
-    "Who handles on-call escalation?",
-    "What must be included in a shift handoff?",
-    "When are routine maintenance windows scheduled?",
-  ],
-  people: [
-    "How many vacation days do employees receive?",
-    "How many unused vacation days can carry over?",
-    "What is the annual education budget?",
-    "What is the home office allowance?",
-    "How much parental leave is available?",
-  ],
-};
+import demoQuestions from "../../../api/src/knowledgellm/demo_questions.json";
 export interface Message {
   question: string;
   response: ChatAnswer;
@@ -79,16 +57,18 @@ export function ChatPanel({
           >
             <h3>Try a question</h3>
             <div className="suggestion-buttons">
-              {suggestedQuestions[department].map((question) => (
-                <button
-                  key={question}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onSuggestion(question)}
-                >
-                  {question}
-                </button>
-              ))}
+              {demoQuestions
+                .filter((item) => item.department === department)
+                .map(({ id, question }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onSuggestion(question)}
+                  >
+                    {question}
+                  </button>
+                ))}
             </div>
           </section>
         ))}

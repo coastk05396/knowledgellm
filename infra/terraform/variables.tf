@@ -95,3 +95,9 @@ variable "auth_lambda_package_path" {
   type        = string
   default     = "../../build/demo-auth.zip"
 }
+
+variable "answer_cache_enabled" {
+  description = "Enable fixed demo-answer caching only after validating the Cohere index migration."
+  type        = bool
+  default     = false
+}

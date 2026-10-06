@@ -5,9 +5,12 @@ from typing import Protocol
 from urllib.parse import quote, unquote_plus
 
 from knowledgellm.documents import DocumentStorage, document_for_key
+from knowledgellm.index_versions import S3IndexVersions
 
 
 class VectorIndex(Protocol):
+    def upsert_version(self, document_id: str, records: list[dict[str, object]]) -> None: ...
+
     def replace_document(self, document_id: str, records: list[dict[str, object]]) -> None: ...
 
 
@@ -64,7 +67,10 @@ def normalize_s3_event(event: Mapping[str, object]) -> list[dict[str, object]]:
         or not isinstance(key, str)
     ):
         raise ValueError("invalid object event")
-    return [{"s3": {"bucket": {"name": bucket_name}, "object": {"key": quote(key, safe="/")}}}]
+    normalized_object = {"key": quote(key, safe="/")}
+    if isinstance(obj.get("version-id"), str):
+        normalized_object["versionId"] = obj["version-id"]
+    return [{"s3": {"bucket": {"name": bucket_name}, "object": normalized_object}}]
 
 
 def ingest_s3_object(
@@ -72,22 +78,37 @@ def ingest_s3_object(
     storage: DocumentStorage,
     index: VectorIndex,
     embedder: Embedder,
+    versions: S3IndexVersions | None = None,
 ) -> int:
     key = _source_key(event)
     document = document_for_key(key)
     if document is None or not key.endswith(".md"):
         raise ValueError("document key is not in the approved catalog")
 
-    chunks = chunk_markdown(storage.read_document(key))
+    from knowledgellm.providers import split_embedding_text
+
+    record = event["Records"][0]
+    version_id = record["s3"]["object"].get("versionId")
+    if versions is not None and not version_id:
+        version_id = storage.current_version(key)
+    if version_id is not None and (not isinstance(version_id, str) or not version_id or version_id == "null"):
+        raise ValueError("invalid immutable source version")
+    contents = storage.read_document(key, version_id=version_id) if version_id else storage.read_document(key)
+    chunks = [part for chunk in chunk_markdown(contents) for part in split_embedding_text(chunk)]
     if not chunks:
-        index.replace_document(document.id, [])
+        if version_id:
+            index.upsert_version(document.id, [])
+            if versions is not None:
+                versions.complete(document.id, version_id, 0)
+        else:
+            index.replace_document(document.id, [])
         return 0
     vectors = embedder.embed(chunks)
     if len(vectors) != len(chunks):
         raise ValueError("embedding count did not match chunk count")
     records: list[dict[str, object]] = []
     for chunk_index, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
-        point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{key}:{chunk_index}"))
+        point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{key}:{version_id or 'unversioned'}:{chunk_index}"))
         records.append(
             {
                 "id": point_id,
@@ -100,17 +121,23 @@ def ingest_s3_object(
                 "chunk_index": chunk_index,
             }
         )
-    index.replace_document(document.id, records)
+    if version_id:
+        for record in records:
+            record["source_version_id"] = version_id
+        index.upsert_version(document.id, records)
+        if versions is not None:
+            versions.complete(document.id, version_id, len(records))
+    else:
+        index.replace_document(document.id, records)
     return len(records)
 
 
 def handler(event: dict[str, object], context: object) -> dict[str, object]:
     del context
-    from qdrant_client import QdrantClient
-
     from knowledgellm.configuration import read_secret
     from knowledgellm.documents import S3DocumentStorage
-    from knowledgellm.providers import FastEmbedder, QdrantVectorIndex
+    from knowledgellm.providers import CohereEmbedder, QdrantVectorIndex, qdrant_client
+    from knowledgellm.index_versions import S3IndexVersions
 
     bucket = os.getenv("DOCUMENTS_BUCKET")
     qdrant_url = os.getenv("QDRANT_URL")
@@ -120,9 +147,10 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
 
     records = normalize_s3_event(event)
     storage = S3DocumentStorage(bucket)
-    client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=10.0)
+    client = qdrant_client(qdrant_url, qdrant_api_key)
     index = QdrantVectorIndex(client)
-    embedder = FastEmbedder(os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
+    embedder = CohereEmbedder()
+    versions = S3IndexVersions(bucket)
     indexed = 0
     for record in records:
         if not isinstance(record, dict):
@@ -132,5 +160,5 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         bucket_name = event_bucket.get("name") if isinstance(event_bucket, dict) else None
         if bucket_name != bucket:
             raise ValueError("object event does not match configured bucket")
-        indexed += ingest_s3_object({"Records": [record]}, storage, index, embedder)
+        indexed += ingest_s3_object({"Records": [record]}, storage, index, embedder, versions=versions)
     return {"indexed_chunks": indexed}

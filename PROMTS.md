@@ -30,14 +30,28 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 
 ## Backend, Infrastructure, and Cost Constraints
 
-- Use React/Vite/TypeScript, Python 3.12 Lambda, API Gateway HTTP API, private encrypted/versioned S3, EventBridge ingestion, FastEmbed CPU embeddings, department-filtered Qdrant, and Groq generation.
+- Use React/Vite/TypeScript, Python 3.12 Lambda, API Gateway HTTP API, private encrypted/versioned S3, EventBridge ingestion, Bedrock Cohere multilingual v3 embeddings in Singapore, department-filtered Qdrant, and Groq generation.
 - Declare AWS resources and changes in `infra/terraform/`; keep maintained SAM configuration consistent. Use remote state and review plans for drift and unintended resources.
-- Chunk source text with trusted department/source metadata; create required Qdrant filter indexes. Store FastEmbed and Hugging Face caches under Lambda's writable `/tmp`.
+- Chunk source text with trusted department/source metadata; create required Qdrant filter indexes. Embed documents with `search_document` and questions with `search_query` using `cohere.embed-multilingual-v3` (1024 dimensions). Batch within the provider limits and split long text without silent truncation; retain ZIP Lambda packaging and remove FastEmbed/ONNX deployment dependencies.
 - Keep provider keys backend-only in SSM Parameter Store SecureString. Never commit credentials or put secrets in frontend variables.
 - Minimize demo cost through eligible free allowances and request-based services. Avoid always-on compute, NAT gateways, provisioned concurrency, and other fixed charges. Free eligibility and quotas must be checked for the target account; a zero bill is not guaranteed.
 - Use seven-day CloudWatch log retention and billing alerts. Record latency, token usage, guardrail outcomes, and configured inference-cost estimates without raw questions, answers, document excerpts, or PII. Estimated inference cost is not an invoice or total AWS cost.
 - Block PII in questions/output and mask retrieved-source PII before generation. Current regex coverage is common email, phone, and US SSN patterns, not comprehensive detection. Treat source text as data, not instructions; validate citations against authorized context.
 - Display backend guardrail outcomes explicitly: pending, passed, question/output blocked, source masked, unavailable. Missing status must never imply success; missing usage/rates means cost unavailable.
+
+## Cohere Migration and Fixed Demo Answer Cache
+
+- Share one JSON catalog of exactly 15 stable-ID suggested questions (five each for Finance, Operations, People). Match only exact text after trimming leading/trailing whitespace; preserve case and internal whitespace. Custom questions use normal retrieval/generation and never store answers.
+- Reindex the six approved S3 document versions into the separate `knowledgellm-cohere-v3` Qdrant collection; never mix embedding dimensions/models or delete the old collection during migration. Reuse Bedrock, Qdrant, and Groq service clients.
+- Use one encrypted DynamoDB on-demand table (`pk` string, TTL attribute `expires_at`) for cross-Lambda answer sharing. Cache items expire after 86,400 seconds; check expiry at read time because TTL deletion is asynchronous. Enable with `ANSWER_CACHE_ENABLED=true` only after migration verification; default is disabled. No Redis, embedding cache, or container migration.
+- Validate verified login, full authorized department scope, and question PII before any cache read. Key includes fixed question ID/text, full scope, indexed document-version fingerprint, embedding/generation models, collection, prompt version, and guardrail version.
+- Store only successful grounded answers with valid authorized citations and passed or safely masked PII outcomes. Never store tokens, presigned links, errors, refusals, or answers without valid sources. Recheck output PII and citation permission on hits.
+- Compare current S3 VersionId with completion manifests at `_indexes/{collection}/{document_id}/{sha256(version_id)}.json`; fail unavailable during incomplete indexing rather than serving stale content. Verify versions again before storing a generated answer.
+- Fail open from DynamoDB faults to ordinary Cohere/Qdrant/Groq processing; retain safe unavailable behavior for Bedrock faults.
+- Preserve `/chat` fields and add `cache_status: hit | miss | bypass`. A hit reports current generation tokens and estimated Groq inference cost as zero; AWS request/storage/embedding costs and free-tier eligibility remain separate.
+- Log cache outcomes and per-stage durations without question, answer, source content, or login tokens; compare actual first-request versus hit latency without guaranteed timings.
+- Grant chat only GetItem/PutItem on its table and InvokeModel on the selected Singapore foundation-model ARN. Grant ingestion only the required versioned source reads and completion-manifest writes; retain existing authorization, PII, and citation safeguards.
+- Deliver code, tests, migration tooling, documentation, and a separate signed PR to `main`; keep UI PR #14 separate. Production deployment needs separate approval. Preserve prior deployment artifact and old collection for rollback; do not move Qdrant region or move generation from Groq to Bedrock.
 
 ## Acceptance Criteria
 
@@ -45,6 +59,8 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 - [x] One-click switching, green verification, success toast, folder expansion, and session restoration work without frontend passwords.
 - [x] `DEMO_MODE=false` and unknown users reject custom sign-in.
 - [x] Authorized sample chat returns a grounded answer and working citation; input PII refusal reports its outcome.
+- [ ] Verify all 15 questions retrieve supporting sources from the six documents and preserve department isolation; verify repeat answers across Lambda environments make no embedding/vector/generation calls.
+- [ ] Cover invalid tokens, PII, expiry, updated documents, invalid citations, and DynamoDB/Bedrock failures; run frontend/backend tests, frontend build, Terraform validation/plan, and available SAM validation.
 - [ ] Recheck cross-department chat, source masking, output blocking, provider failures, and missing telemetry in the deployed demo.
 - [ ] Verify the complete keyboard and desktop/mobile journey on the public frontend.
 
