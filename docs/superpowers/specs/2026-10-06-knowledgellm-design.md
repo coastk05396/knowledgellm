@@ -6,6 +6,8 @@
 
 **UI references:** [Mobile](../../design/reference/knowledgellm-mobile.png) and [desktop](../../design/reference/knowledgellm-desktop.png).
 
+**Document ownership:** This is the current product requirements and design source. Track execution in the [implementation plan](../plans/2026-10-06-knowledgellm-full-stack-prototype.md); use [README](../../../README.md) for setup instructions.
+
 ## Goal
 
 Build a permission-aware knowledge assistant that lets authenticated department users browse the documents they can access, ask questions about them, and inspect cited sources. The first implementation should be a deployable prototype on AWS, with a strong cost-minimization goal and no promise of zero cost until account-specific service pricing and quotas are checked.
@@ -35,6 +37,7 @@ The product has three initial departments and representative identities matching
 - Server-side PII checks/redaction and safe handling of out-of-scope questions.
 - Basic chat history for the active session, a new-chat action, and visible per-chat token/cost estimates when provider usage data is available.
 - A responsive desktop/mobile interface following the supplied references.
+- A public Cloudflare Pages frontend with a custom-domain option and Terraform-managed AWS infrastructure. Cloudflare project/domain configuration is a separate setup step.
 
 ### Excluded from the first implementation
 
@@ -45,12 +48,12 @@ The product has three initial departments and representative identities matching
 
 ## Architecture
 
-- **Web:** React, Vite, and TypeScript. The browser uses Cognito managed login with OAuth authorization-code flow and PKCE. Cognito presents the username/password form; the app never handles or stores passwords. Account switching clears the local app session and requires re-authentication with `prompt=login`.
+- **Web:** React, Vite, and TypeScript, hosted as static assets on Cloudflare Pages for the public demo. The browser uses Cognito managed login with OAuth authorization-code flow and PKCE. Cognito presents the username/password form; the app never handles or stores passwords. Account switching clears the local app session and requires re-authentication with `prompt=login`.
 - **API:** Python 3.12 AWS Lambda behind API Gateway HTTP API. The API verifies the Cognito access token and derives user identity/groups only from verified claims. Request bodies never select or override a role.
 - **Token contract:** Protected routes require the Cognito `openid` authorization scope and the API accepts only authorizer claims with `token_use=access`. The public health route has no user-data access.
 - **Document storage and ingestion:** S3 stores source files in a private bucket. An ingestion worker extracts text, chunks it, adds department/source metadata, and writes vectors to Qdrant. Keep ingestion separate from question answering so extraction work does not lengthen the interactive request path. The API authorizes document opens and issues short-lived links; the browser never receives broad bucket access.
 - **Retrieval indexes:** Create Qdrant keyword payload indexes for `department` and `document_id` before filtered queries or replacement writes, including when the collection already exists.
-- **Cognito managed login:** CloudFormation creates a default `AWS::Cognito::ManagedLoginBranding` style for the web app client so the hosted username/password form is available after deployment.
+- **Infrastructure:** Terraform in `infra/terraform/` manages AWS resources, including Cognito managed-login branding. The initial prototype used SAM; new deployment work follows Terraform. Cloudflare Pages configuration is documented in README.
 - **Retrieval and generation:** Local CPU embeddings (FastEmbed) and Qdrant provide vector search. The API applies an exact department filter before retrieved text enters the prompt. Groq is the proposed external inference provider from the source brief; provider choice remains subject to current free-tier limits, data-retention terms, and deployment-region constraints.
 - **Guardrails and telemetry:** Apply input/output PII checks in the API, reject unauthorized or unsupported requests, and log operational metadata without storing raw prompts or document excerpts by default. Show token cost as an estimate and label it as such.
 
@@ -64,7 +67,7 @@ The product has three initial departments and representative identities matching
 
 ## Cost and Configuration
 
-Avoid Bedrock Knowledge Bases and OpenSearch Serverless for the initial cost-constrained prototype. Current published allowances include 10,000 Cognito MAUs for Lite/Essentials and 1 million Lambda requests plus 400,000 GB-seconds per month; API Gateway's published 1 million-call offer is time-limited, and S3's legacy new-account offer is eligibility-dependent. Qdrant Cloud's free cluster is prototype-sized (1 GB RAM, 4 GB disk, no HA). Groq free-plan quotas vary by model; its data policy permits limited reliability/abuse logging for up to 30 days. Use synthetic documents until external-provider data handling is reviewed. The exact price depends on AWS account age/plan, region, traffic, storage, egress, logs, delivery channels, and current third-party terms, so do not promise indefinite $0. Verify current rates and quotas before deployment, configure a budget alert, and require explicit approval before creating billable cloud resources. Store secrets in environment-backed local configuration or AWS Secrets Manager, never in source control. Sources: [Cognito pricing](https://aws.amazon.com/cognito/pricing/), [Lambda pricing](https://aws.amazon.com/lambda/pricing/), [API Gateway pricing](https://aws.amazon.com/api-gateway/pricing/), [S3 FAQ](https://aws.amazon.com/s3/faqs/), [Qdrant pricing](https://qdrant.tech/pricing/), [Groq rate limits](https://console.groq.com/docs/rate-limits), and [Groq data handling](https://console.groq.com/docs/your-data).
+Minimize demo costs by using eligible service allowances; an indefinite $0 bill is not a requirement or guarantee. Avoid Bedrock Knowledge Bases and OpenSearch Serverless for this prototype. Verify account/region eligibility, provider quotas, egress, storage, logging, and data handling before provisioning. Configure a billing alert, obtain deployment authorization before provisioning billable resources, and use synthetic documents for initial acceptance. Never commit credentials or expose provider keys in browser configuration; the selected AWS deployment retrieves keys from Secrets Manager. Setup details and pricing references belong in [README](../../../README.md#aws-prototype-setup-with-terraform).
 
 ## Failure Behavior
 
@@ -83,6 +86,7 @@ Avoid Bedrock Knowledge Bases and OpenSearch Serverless for the initial cost-con
 5. PII guardrails and failure states are visible and do not expose protected text in errors or routine logs.
 6. The main journey works at desktop and mobile widths with keyboard-accessible identity, folder, citation, and chat controls.
 7. Local setup, tests, and deployment steps are documented after the implementation stack is established; cloud deployment cost is verified before resources are provisioned.
+8. The Cloudflare Pages production URL, and selected custom domain when configured, support HTTPS sign-in/logout and cited chat using the AWS API. Cognito URLs and API CORS match the deployed origin; frontend assets expose no provider secrets.
 
 ## Decisions and Open Items
 

@@ -4,11 +4,13 @@
 
 **Goal:** Build a local runnable, responsive KnowledgeLLM prototype with Cognito username/password login, department-scoped document access, and cited answers.
 
-**Architecture:** A Vite React app uses Cognito managed login authorization-code flow with PKCE and calls an API Gateway HTTP API. The API trusts only API Gateway JWT-authorizer claims, applies department policy before S3 reads or Qdrant retrieval, and passes authorized chunks through PII and grounding guardrails before Groq generation. A separate S3-triggered Lambda indexes synthetic Markdown samples into Qdrant.
+**Architecture:** See the [product spec](../specs/2026-10-06-knowledgellm-design.md#architecture) for the current deployment design. The implemented Vite React app uses Cognito managed login authorization-code flow with PKCE and calls an API Gateway HTTP API. The API trusts only API Gateway JWT-authorizer claims, applies department policy before S3 reads or Qdrant retrieval, and passes authorized chunks through PII and grounding guardrails before Groq generation. A separate S3-triggered Lambda indexes synthetic Markdown samples into Qdrant.
 
-**Tech Stack:** TypeScript, React, Vite, `oidc-client-ts`; Python 3.12, pytest, boto3, FastEmbed, Qdrant client, Groq SDK; AWS SAM template; Vitest and Testing Library for web.
+**Tech Stack:** TypeScript, React, Vite, `oidc-client-ts`; Python 3.12, pytest, boto3, FastEmbed, Qdrant client, Groq SDK; Terraform for AWS deployment (the initial implementation used SAM); Vitest and Testing Library for web.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-knowledgellm-design.md`
+**Spec:** [KnowledgeLLM design](../specs/2026-10-06-knowledgellm-design.md)
+
+**Status:** Tasks 1–6 record the completed initial implementation, including historical SAM work. Terraform is the current deployment path; use [README](../../../README.md#aws-prototype-setup-with-terraform) for commands. Public deployment remains pending.
 
 ## Global Constraints
 
@@ -143,3 +145,48 @@ Ruling: Qdrant document IDs are opaque single path segments while S3 keys retain
 - [x] Confirm regression tests fail before fixes and pass after: web 18 tests; API 37 tests.
 - [x] Verify frontend production build, Prettier, npm audit, SAM lint validation, and SAM build.
 - [x] Push the signed feature branch and open [PR #1](https://github.com/coastk05396/knowledgellm/pull/1) against the published `main` baseline.
+
+## Deployment and demo checklist
+
+These tasks are pending. Use the linked README instructions for commands and configuration; check an item only after verifying it in the target environment.
+
+### Before deployment
+
+- [ ] Confirm AWS account, region, Free Tier eligibility, and current AWS/Cloudflare/Qdrant/Groq prices, quotas, and data handling terms.
+- [ ] Set a billing alert; choose a unique Cognito prefix and a stable Pages/custom-domain origin.
+- [ ] Create provider keys and store them using the [AWS setup instructions](../../../README.md#aws-prototype-setup-with-terraform).
+- [ ] Configure ignored Terraform values, build the Lambda package, and review the plan for expected resources only.
+
+### AWS and Cloudflare setup
+
+- [ ] Provision the reviewed AWS stack using the [Terraform instructions](../../../README.md#aws-prototype-setup-with-terraform).
+- [ ] Create each demo user in exactly one department group and upload only fictional sample documents under matching prefixes.
+- [ ] Connect the repository to Pages and configure its build using [Cloudflare setup](../../../README.md#cloudflare-pages-setup).
+- [ ] Configure public frontend variables and matching Terraform CORS/callback/logout URLs, then rebuild.
+- [ ] Attach the custom domain and verify DNS/HTTPS; repeat URL configuration and checks if the domain changes.
+
+### Live acceptance and observability
+
+- [ ] Exercise the [spec's acceptance criteria](../specs/2026-10-06-knowledgellm-design.md#acceptance-criteria) for all three users, account switching, department isolation, citations, desktop/mobile controls, and page refresh.
+- [ ] Ask a normal question and check CloudWatch token counts, estimated cost, latency, department, and guardrail outcome using the [README queries](../../../README.md#chat-observability).
+- [ ] Submit email/phone/SSN patterns and verify input redaction, retrieved-source redaction, and blocked PII output without logging protected text.
+- [ ] Verify both Lambda log groups have seven-day retention and contain no questions, answers, document text, or PII.
+- [ ] Review billing and shared CloudWatch allowance usage after the demo; record results here.
+
+### Cleanup
+
+- [ ] Remove the Pages project and its associated custom-domain DNS records when no longer needed.
+- [ ] Empty all S3 document versions and destroy the AWS stack using [cleanup instructions](../../../README.md#cleanup).
+- [ ] Remove externally created demo secrets, provider keys, and Qdrant clusters when no longer needed.
+
+## Historical local verification
+
+These results were recorded during the initial prototype implementation on 2026-10-06. They have not been rerun for this documentation reorganization. SAM checks apply to the earlier deployment path, not the current Terraform stack.
+
+- AWS Cognito documentation confirms managed login accepts username/password and `prompt=login` requests re-authentication: [authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html).
+- Reference images are checked in under `docs/design/reference/`.
+- `web/`: `npm test -- --run` passes (18 tests); `npm run build` passes with TypeScript checking; Prettier check and `npm audit --audit-level=moderate` pass. Chromium screenshots at 390px and 1440px previously showed no horizontal overflow; account switching, keyboard folder controls, citations, and New chat were exercised.
+- `api/`: Python 3.12 pytest passes (37 tests) with pytest isolated under `/tmp/knowledgellm-test-deps`; runtime dependencies are supplied by the SAM build environment. `compileall` passes.
+- `template.yaml`: `cfn-lint`, `sam validate --lint`, and `sam build` pass. Each function build directory is 230,640,497 bytes, under Lambda's 262,144,000-byte uncompressed package limit with roughly 31 MB of headroom.
+- Post-review fixes add Cognito managed-login branding, require access tokens with the `openid` scope, index Qdrant filter fields before access, preserve the chat when citations open in a new tab, and prevent IME Enter from submitting unfinished text.
+- Cloud deployment and live Cognito verification were not run.

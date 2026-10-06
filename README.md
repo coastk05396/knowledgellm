@@ -2,6 +2,13 @@
 
 🔐 KnowledgeLLM is a permission-aware knowledge assistant prototype. Cognito manages username/password sign-in; a Python API applies Cognito group access before listing S3 documents or retrieving Qdrant chunks. Answers cite only approved, retrieved documents. The included content is fictional.
 
+## Documentation
+
+- [Product spec](docs/superpowers/specs/2026-10-06-knowledgellm-design.md): edit requirements, constraints, and acceptance criteria here.
+- [Implementation plan](docs/superpowers/plans/2026-10-06-knowledgellm-full-stack-prototype.md): tasks, deployment/demo checklist, and verification results.
+- [Project status](docs/product-development.md): document ownership, current status, and next action.
+- [Agent instructions](AGENTS.md): coding-agent rules.
+
 ## Deployment architecture
 
 Cloudflare Pages hosts the static React/Vite frontend; Terraform manages the AWS backend. This is the planned public deployment layout:
@@ -36,7 +43,7 @@ Cloudflare Pages hosts the static React/Vite frontend; Terraform manages the AWS
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Pages serves static assets without a Docker container. Keep provider keys in the backend secret store; all `VITE_*` configuration is visible in the browser bundle. Cloudflare's static asset requests are free and unlimited, subject to other platform limits; AWS and external providers have separate charges. See [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and the Cloudflare deployment checklist in [promt.md](promt.md).
+Pages serves static assets without a Docker container. Keep provider keys in the backend secret store; all `VITE_*` configuration is visible in the browser bundle. Cloudflare's static asset requests are free and unlimited, subject to other platform limits; AWS and external providers have separate charges. See [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and [Cloudflare setup](#cloudflare-pages-setup).
 
 ## Local development
 
@@ -84,6 +91,34 @@ Set `cognito_domain_prefix` to a globally unique lowercase value and set the web
 rtk terraform -chdir=infra/terraform output
 ```
 
+After deployment, upload only the fictional samples to the `documents_bucket_name` output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. Ingestion creates Qdrant keyword indexes for `department` and `document_id` before replacing filtered records. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `groq_input_rate_per_million_usd` and `groq_output_rate_per_million_usd` from current pricing to show cost estimates; otherwise cost is reported as unavailable. Terraform resources and provider usage can still incur charges, including Cognito domain, S3 storage, Lambda, API Gateway, and Secrets Manager. `terraform destroy` removes the managed AWS resources; versioned bucket objects must be removed before destroy.
+
+Track deployment and demo progress in the [implementation plan](docs/superpowers/plans/2026-10-06-knowledgellm-full-stack-prototype.md#deployment-and-demo-checklist). The Terraform-managed private Lambda artifact bucket is temporary deployment storage and is force-removed during `terraform destroy`; keep its contents limited to the built code package.
+
+Before provisioning, review account-specific allowances and current provider terms: [Cognito](https://aws.amazon.com/cognito/pricing/), [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/), [S3](https://aws.amazon.com/s3/faqs/), [Secrets Manager](https://aws.amazon.com/secrets-manager/pricing/), [Qdrant](https://qdrant.tech/pricing/), [Groq rate limits](https://console.groq.com/docs/rate-limits), and [Groq data handling](https://console.groq.com/docs/your-data). Check CloudWatch pricing in the observability section below.
+
+## Cloudflare Pages setup
+
+Cloudflare is configured separately from the AWS Terraform stack. Check [Pages limits](https://developers.cloudflare.com/pages/platform/limits/) before deployment; domain registration and backend services have separate costs.
+
+1. In Cloudflare Workers & Pages, create a Pages project connected to this GitHub repository. Select the approved frontend branch; use `main` for production after the implementation is merged.
+2. Set root directory to `web`, build command to `npm run build`, output directory to `dist`, and Node.js to a supported version (22.12+). See the [Vite guide](https://developers.cloudflare.com/pages/framework-guides/deploy-a-vite3-project/).
+3. Choose a stable origin such as `https://knowledgellm.pages.dev` or `https://knowledge.example.com`. Set Terraform `web_origin` to that origin, and `web_callback_url` and `web_logout_url` to the same URL with a trailing `/`. Review and apply the Terraform plan.
+4. Set Pages production build variables from Terraform outputs:
+
+   | Pages variable | Terraform output or value |
+   | --- | --- |
+   | `VITE_API_URL` | `api_url` |
+   | `VITE_COGNITO_DOMAIN` | `cognito_domain_url` |
+   | `VITE_COGNITO_ISSUER` | `cognito_issuer` |
+   | `VITE_COGNITO_CLIENT_ID` | `cognito_client_id` |
+   | `VITE_REDIRECT_URI` | Exact `web_callback_url` |
+
+5. Deploy or rebuild after setting variables. Check HTTPS sign-in, logout, account switching, source links, chat, and page refresh on the stable URL. Provider keys stay in the AWS backend secret store; GitHub Secrets or Pages build settings do not automatically configure Lambda.
+6. For a custom domain, add it under the Pages project's Custom domains settings and complete the [required DNS setup](https://developers.cloudflare.com/pages/configuration/custom-domains/). When changing domains, update Terraform CORS/callback/logout URLs and the Pages redirect variable, rebuild, and repeat login checks. Preview URLs need separately allowed URLs; the current stack accepts one configured origin/callback/logout URL.
+
+## Chat observability
+
 📊 Chat telemetry is written as structured metadata to the Terraform output `knowledge_log_group_name`: token counts, estimated model cost, latency, department, retrieved count, and guardrail outcome. It does not log questions, answers, or source text. Terraform sets log retention to seven days and creates no custom metrics or paid dashboards. AWS currently includes 5 GB/month for CloudWatch Logs ingestion, archive storage, and Logs Insights scan data, but this allowance is shared across the account and is not a guarantee of a $0 bill. Review current regional pricing and set AWS billing alerts before deployment. [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/).
 
 In CloudWatch Logs Insights, select that log group to summarize guardrail outcomes:
@@ -105,12 +140,18 @@ fields @timestamp, @message
 | stats sum(input_tokens) as input_tokens, sum(output_tokens) as output_tokens by bin(1h)
 ```
 
-After deployment, upload only the fictional samples to the `documents_bucket_name` output, preserving department folders. S3 sends object-created events through EventBridge to the ingestion Lambda. Ingestion creates Qdrant keyword indexes for `department` and `document_id` before replacing filtered records. The API uses FastEmbed on CPU, Qdrant department filters, and Groq JSON answers with server-validated citation IDs. Set both `groq_input_rate_per_million_usd` and `groq_output_rate_per_million_usd` from current pricing to show cost estimates; otherwise cost is reported as unavailable. Terraform resources and provider usage can still incur charges, including Cognito domain, S3 storage, Lambda, API Gateway, and Secrets Manager. `terraform destroy` removes the managed AWS resources; versioned bucket objects must be removed before destroy.
-
-See [promt.md](promt.md) for the pre-deployment, demo, and cleanup checklist. The Terraform-managed private Lambda artifact bucket is temporary deployment storage and is force-removed during `terraform destroy`; keep its contents limited to the built code package.
-
 ## Access and prototype limits
 
 API Gateway validates JWTs. The API derives access only from the verified `cognito:groups` claim; request department values are ignored. S3 stays private, source links expire after 120 seconds, and unknown or cross-department document IDs return the same not-found response. Ingestion accepts only catalogued Markdown keys up to 1 MB. Document IDs are opaque single path segments; S3 keys remain department-prefixed.
 
 The PII guardrail currently detects and redacts common email, phone, and U.S. SSN patterns. This is a prototype filter, not comprehensive PII detection or a compliance control. Keep real company data out of the sample until provider handling, deployment region, retention, and organizational approval have been reviewed. Provider errors do not return prompts or source excerpts. See [the product spec](docs/superpowers/specs/2026-10-06-knowledgellm-design.md) for architecture, failure behavior, and cost assumptions.
+
+## Cleanup
+
+Remove the Pages project and its associated custom-domain DNS records if the public demo is no longer needed. Empty all object versions and delete markers in the private document bucket before destroying the AWS resources:
+
+```sh
+rtk terraform -chdir=infra/terraform destroy
+```
+
+Confirm the managed resources are gone. Secrets created outside Terraform, external Qdrant clusters, and Groq/Qdrant credentials require separate cleanup. Preserve any resources still used by another environment.
