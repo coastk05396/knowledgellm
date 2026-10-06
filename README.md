@@ -74,7 +74,14 @@ The frontend starts without credentials but disables sign-in. Copy `web/.env.exa
 
 ☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The web client uses authorization code with PKCE and has no client secret. Protected API routes require the `openid` scope and accept Cognito access tokens only. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
 
-Create Qdrant and Groq credentials outside the repository and save each in AWS Secrets Manager. Copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`, then set the Qdrant URL and both secret ARNs. Never put secret values in Terraform variables or commit the local tfvars file. Build the Lambda package and provision the infrastructure:
+Create Qdrant and Groq credentials outside the repository and save each in AWS Secrets Manager. To use a secure remote S3 backend for Terraform state in Singapore (`ap-southeast-1`), run the one-time bootstrap setup first:
+
+```sh
+rtk terraform -chdir=infra/bootstrap init
+rtk terraform -chdir=infra/bootstrap apply
+```
+
+Then build the Lambda package, copy the configuration, and provision the main infrastructure:
 
 ```sh
 rtk bash scripts/package-lambdas.sh

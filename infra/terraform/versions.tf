@@ -6,6 +6,14 @@ terraform {
       version = "~> 6.0"
     }
   }
+
+  backend "s3" {
+    bucket       = "knowledgellm-tfstate-768363152398"
+    key          = "knowledgellm/terraform.tfstate"
+    region       = "ap-southeast-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {
