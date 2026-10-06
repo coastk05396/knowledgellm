@@ -183,12 +183,24 @@ h2 {
   content: " · ";
 }
 .identity-auth-subline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9.5px;
+  font-size: 10px;
+  font-weight: 500;
   letter-spacing: 0.2px;
-  color: var(--muted);
-  opacity: 0.85;
+  color: var(--green);
   margin-top: 2px;
+}
+.identity-auth-subline::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }
 .avatar {
   display: grid;

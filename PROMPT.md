@@ -142,11 +142,12 @@ The prototype models three representative enterprise identities:
   - [ ] Verify `web/src/components/DepartmentFolders.tsx` evaluates `permitted = true` for `operations` and removes `<LockKeyhole />`.
   - [ ] Verify automatic expansion state `expanded` cleanly reveals `#files-operations`.
 
-### Issue #2: Display AWS Cognito Login Label Under Persona Name
+### Issue #2: Display Green AWS Cognito Verified Label Only When Logged In
 - **Status**: 🟢 Completed
-- **Requirement**: Under the persona name, display the small text subline `AWS Cognito verified while login` alongside the department label.
+- **Requirement**: Do not display the verification label constantly for all users. Only when a persona is clicked/logged in (`selected`), display the green text subline `AWS Cognito verified` with an active indicator dot under their name/department. Unselected personas remain clean without the subline.
 - **Implementation**:
-  - Updated [IdentityPicker.tsx](file:///home/rick/repo/knowledgellm/web/src/components/IdentityPicker.tsx) and [app.css](file:///home/rick/repo/knowledgellm/web/src/styles/app.css) with a dedicated `.identity-text` container displaying the persona name/department in the primary line and `.identity-auth-subline` showing `AWS Cognito verified while login` below.
+  - Updated [IdentityPicker.tsx](file:///home/rick/repo/knowledgellm/web/src/components/IdentityPicker.tsx) to conditionally render `{departments.includes(person.department) && <span className="identity-auth-subline">AWS Cognito verified</span>}`.
+  - Updated [app.css](file:///home/rick/repo/knowledgellm/web/src/styles/app.css) to style `.identity-auth-subline` in bright green (`var(--green)`) with a glowing indicator dot.
   - Formatted `.identity-label` to cleanly separate `Identity` and `Tap to switch`.
 
 ### Issue #3: Remove Redundant People / User Icon Button From Header

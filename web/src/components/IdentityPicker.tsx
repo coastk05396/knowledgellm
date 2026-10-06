@@ -43,7 +43,11 @@ export function IdentityPicker({
                 <strong>{person.name}</strong>
                 <small>{person.label}</small>
               </span>
-              <span className="identity-auth-subline">AWS Cognito verified while login</span>
+              {departments.includes(person.department) && (
+                <span className="identity-auth-subline">
+                  AWS Cognito verified
+                </span>
+              )}
             </span>
           </button>
         ))}
