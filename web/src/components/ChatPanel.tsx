@@ -132,8 +132,20 @@ export function ChatPanel({
           ))}
           {busy && (
             <p role="status" className="thinking">
-              <Sparkles size={18} />
-              Checking your permitted sources…
+              <Sparkles
+                size={18}
+                className="thinking-icon"
+                aria-hidden="true"
+              />
+              <span>
+                Checking your permitted sources
+                <span className="sr-only">…</span>
+                <span className="thinking-dots" aria-hidden="true">
+                  <span>.</span>
+                  <span>.</span>
+                  <span>.</span>
+                </span>
+              </span>
             </p>
           )}
           {signedIn && !busy && !messages.length && (

@@ -527,6 +527,33 @@ h2 {
   color: var(--muted);
   font-size: 14px;
 }
+.thinking-icon {
+  color: var(--gold);
+  animation: thinking-spin 1.5s linear infinite;
+}
+.thinking-dots span {
+  animation: thinking-dot 1.2s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes thinking-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 .workspace-notices {
   width: min(100%, 850px);
   padding: 0 36px 20px;
@@ -720,12 +747,14 @@ h2 {
     width: 100%;
   }
   .identity-auth-subline {
-    justify-content: center;
+    display: block;
+    text-align: center;
     font-size: 9px;
     letter-spacing: 0;
   }
   .identity-auth-subline::before {
-    flex-shrink: 0;
+    margin-right: 4px;
+    vertical-align: middle;
   }
   .identity-primary {
     flex-direction: column;
@@ -751,7 +780,7 @@ h2 {
   .sidebar {
     background: var(--canvas);
     border: 0;
-    padding: 0 24px 24px;
+    padding: 20px 24px 24px;
   }
   .folder-heading {
     padding: 0;
