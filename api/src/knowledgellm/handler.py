@@ -1,6 +1,8 @@
 import base64
 import json
+import logging
 import os
+import time
 from collections.abc import Mapping
 
 from knowledgellm.authz import departments_for_claims
@@ -13,6 +15,8 @@ from knowledgellm.documents import (
     summary_dict,
 )
 from knowledgellm.guardrails import BasicGuardrails
+
+logger = logging.getLogger(__name__)
 
 
 def _response(status: int, body: Mapping[str, object]) -> dict[str, object]:
@@ -44,7 +48,7 @@ def _question_from_event(event: Mapping[str, object]) -> str | None:
 
 
 def handler(event: dict[str, object], context: object) -> dict[str, object]:
-    del context
+    started_at = time.perf_counter()
     request_context = event.get("requestContext")
     path = event.get("rawPath")
     method_context = request_context.get("http") if isinstance(request_context, dict) else None
@@ -85,19 +89,43 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         return _response(200, {"document": {"id": link.id, "title": link.title, "url": link.url}})
 
     if path == "/chat" and method == "POST":
+        request_id = getattr(context, "aws_request_id", None)
+        if not isinstance(request_id, str):
+            request_id = request_context.get("requestId")
+        request_id = request_id if isinstance(request_id, str) else "unknown"
+        department = ",".join(sorted(departments))
         question = _question_from_event(event)
         if question is None:
+            _log_chat_telemetry(
+                request_id, department, started_at, status="invalid_question", guardrail_action="invalid_question"
+            )
             return _response(400, {"error": "invalid_question"})
         try:
             retriever, generator = create_chat_services()
             result = answer_question(question, departments, retriever, generator, BasicGuardrails())
         except Exception:
+            _log_chat_telemetry(
+                request_id, department, started_at, status="assistant_unavailable", guardrail_action="error"
+            )
             return _response(503, {"error": "assistant_unavailable"})
         usage = None
         cost = None
         if result.usage is not None:
             usage = {"input_tokens": result.usage.input_tokens, "output_tokens": result.usage.output_tokens}
             cost = result.usage.cost_usd
+        _log_chat_telemetry(
+            request_id,
+            department,
+            started_at,
+            status="ok",
+            guardrail_action=result.guardrail_action,
+            retrieved_count=result.retrieved_count,
+            redacted_source_count=result.redacted_source_count,
+            input_tokens=result.usage.input_tokens if result.usage else 0,
+            output_tokens=result.usage.output_tokens if result.usage else 0,
+            estimated_cost_usd=result.usage.cost_usd if result.usage else None,
+            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+        )
         return _response(
             200,
             {
@@ -112,3 +140,38 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         )
 
     return _response(404, {"error": "not_found"})
+
+
+def _log_chat_telemetry(
+    request_id: str,
+    department: str,
+    started_at: float,
+    *,
+    status: str,
+    guardrail_action: str,
+    retrieved_count: int = 0,
+    redacted_source_count: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    estimated_cost_usd: float | None = None,
+    model: str | None = None,
+) -> None:
+    logger.info(
+        json.dumps(
+            {
+                "event": "chat_telemetry",
+                "request_id": request_id,
+                "department": department,
+                "status": status,
+                "guardrail_action": guardrail_action,
+                "retrieved_count": retrieved_count,
+                "redacted_source_count": redacted_source_count,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "estimated_cost_usd": estimated_cost_usd,
+                "model": model,
+                "latency_ms": round((time.perf_counter() - started_at) * 1000),
+            },
+            separators=(",", ":"),
+        )
+    )

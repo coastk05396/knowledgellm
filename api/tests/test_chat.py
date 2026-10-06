@@ -69,6 +69,7 @@ def test_pii_is_redacted_before_generation_and_output_with_pii_is_blocked() -> N
     )
 
     assert answer.answer == "For privacy, remove personal details from the question and try again."
+    assert answer.guardrail_action == "question_pii_blocked"
     assert generator.calls == 0
 
 
@@ -84,6 +85,7 @@ def test_pii_in_generated_answer_is_blocked() -> None:
 
     assert answer.answer == "The answer was blocked because it contained personal information."
     assert answer.citations == ()
+    assert answer.guardrail_action == "answer_pii_blocked"
 
 
 def test_retrieved_chunks_are_redacted_before_generation() -> None:
@@ -99,9 +101,11 @@ def test_retrieved_chunks_are_redacted_before_generation() -> None:
     )
     generator = FakeGenerator(citations=["finance-q4-budget-overview"])
 
-    answer_question("What changed?", frozenset({"finance"}), retriever, generator, BasicGuardrails())
+    answer = answer_question("What changed?", frozenset({"finance"}), retriever, generator, BasicGuardrails())
 
     assert generator.received_texts == ["Contact [REDACTED] after checking vendor costs."]
+    assert answer.guardrail_action == "source_pii_redacted"
+    assert answer.redacted_source_count == 1
 
 
 def test_uncited_or_unknown_document_ids_are_not_returned_as_answers() -> None:

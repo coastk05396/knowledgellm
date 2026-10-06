@@ -78,6 +78,51 @@ def test_chat_route_uses_authorizer_group_and_returns_validated_citation(monkeyp
     assert body["cost_usd"] == 0.0005
 
 
+def test_chat_logs_safe_usage_and_guardrail_metadata(monkeypatch, caplog) -> None:
+    caplog.set_level("INFO", logger=handler.__name__)
+    monkeypatch.setattr(handler, "create_chat_services", lambda: (FakeRetriever(), FakeGenerator()))
+    event = {
+        "rawPath": "/chat",
+        "body": '{"question":"What changed in budget?"}',
+        "requestContext": {
+            "http": {"method": "POST"},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+        },
+    }
+
+    response = handler.handler(event, object())
+
+    assert response["statusCode"] == 200
+    record = next(record.message for record in caplog.records if '"event":"chat_telemetry"' in record.message)
+    assert '"department":"finance"' in record
+    assert '"input_tokens":30' in record
+    assert '"output_tokens":10' in record
+    assert '"estimated_cost_usd":0.0005' in record
+    assert '"guardrail_action":"pass"' in record
+    assert "What changed in budget?" not in record
+    assert "Vendor costs changed." not in record
+
+
+def test_chat_logs_pii_guardrail_without_logging_question(monkeypatch, caplog) -> None:
+    caplog.set_level("INFO", logger=handler.__name__)
+    monkeypatch.setattr(handler, "create_chat_services", lambda: (FakeRetriever(), FakeGenerator()))
+    event = {
+        "rawPath": "/chat",
+        "body": '{"question":"Contact alex@example.test"}',
+        "requestContext": {
+            "http": {"method": "POST"},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+        },
+    }
+
+    response = handler.handler(event, object())
+
+    assert response["statusCode"] == 200
+    record = next(record.message for record in caplog.records if '"event":"chat_telemetry"' in record.message)
+    assert '"guardrail_action":"question_pii_blocked"' in record
+    assert "alex@example.test" not in record
+
+
 def test_provider_error_does_not_echo_question_or_error(monkeypatch) -> None:
     def broken_services():
         raise RuntimeError("private prompt alex@example.test")
