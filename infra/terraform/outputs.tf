@@ -29,3 +29,13 @@ output "cognito_domain_url" {
 output "knowledge_log_group_name" {
   value = aws_cloudwatch_log_group.lambda["knowledge"].name
 }
+
+output "groq_api_key_ssm_parameter_name" {
+  description = "SSM Parameter name for Groq API key."
+  value       = length(aws_ssm_parameter.groq_api_key) > 0 ? aws_ssm_parameter.groq_api_key[0].name : var.groq_api_key_secret_arn
+}
+
+output "qdrant_api_key_ssm_parameter_name" {
+  description = "SSM Parameter name for Qdrant API key."
+  value       = length(aws_ssm_parameter.qdrant_api_key) > 0 ? aws_ssm_parameter.qdrant_api_key[0].name : var.qdrant_api_key_secret_arn
+}

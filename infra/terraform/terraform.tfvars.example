@@ -6,10 +6,8 @@ web_callback_url       = "http://localhost:5173/"
 web_logout_url         = "http://localhost:5173/"
 qdrant_url             = "https://your-cluster.example.qdrant.io"
 
-# Free option: AWS Systems Manager Parameter Store (SecureString)
-qdrant_api_key_secret_arn = "arn:aws:ssm:ap-southeast-1:768363152398:parameter/knowledgellm/qdrant-api-key"
-groq_api_key_secret_arn   = "arn:aws:ssm:ap-southeast-1:768363152398:parameter/knowledgellm/groq-api-key"
-
-# Alternative: AWS Secrets Manager (Paid)
-# qdrant_api_key_secret_arn = "arn:aws:secretsmanager:ap-southeast-1:768363152398:secret:qdrant-key"
-# groq_api_key_secret_arn   = "arn:aws:secretsmanager:ap-southeast-1:768363152398:secret:groq-key"
+# Optional: If left blank or omitted, Terraform automatically creates free SSM SecureString
+# parameters (/knowledgellm-demo/qdrant-api-key and /knowledgellm-demo/groq-api-key)
+# with placeholder values. You can update their values with your real keys via AWS Console or CLI.
+# qdrant_api_key_secret_arn = ""
+# groq_api_key_secret_arn   = ""
