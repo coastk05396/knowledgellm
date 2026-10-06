@@ -9,6 +9,7 @@ import { DepartmentFolders } from "../components/DepartmentFolders";
 import { ChatPanel, type Message } from "../components/ChatPanel";
 import { Composer } from "../components/Composer";
 import { SystemMonitor } from "../components/SystemMonitor";
+import { Toast } from "../components/Toast";
 import "../styles/tokens.css";
 import "../styles/app.css";
 interface WorkspaceProps {
@@ -239,13 +240,23 @@ function ConnectedApp() {
     }
   };
   return (
-    <Workspace
-      key={auth.session?.accessToken ?? "signed-out"}
-      session={auth.session}
-      onSwitch={handleSwitch}
-      authLoading={auth.loading}
-      authError={auth.error}
-    />
+    <>
+      <Workspace
+        key={auth.session?.accessToken ?? "signed-out"}
+        session={auth.session}
+        onSwitch={handleSwitch}
+        authLoading={auth.loading}
+        authError={auth.error}
+      />
+      {auth.toast && (
+        <Toast
+          message={auth.toast.message}
+          subtitle={auth.toast.subtitle}
+          department={auth.toast.department}
+          onClose={auth.clearToast}
+        />
+      )}
+    </>
   );
 }
 export default function App() {

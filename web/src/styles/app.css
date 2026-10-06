@@ -923,6 +923,99 @@ h2 {
     font-size: 15px;
   }
 }
+
+.toast-container {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  min-width: 280px;
+  max-width: 420px;
+  animation: toast-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast.finance {
+  border-left-color: var(--finance);
+}
+.toast.operations {
+  border-left-color: var(--operations);
+}
+.toast.people {
+  border-left-color: var(--people);
+}
+.toast-icon {
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.toast.finance .toast-icon {
+  color: var(--finance);
+}
+.toast.operations .toast-icon {
+  color: var(--operations);
+}
+.toast.people .toast-icon {
+  color: var(--people);
+}
+.toast-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.toast-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 14px;
+}
+.toast-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+}
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: auto;
+}
+.toast-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+@keyframes toast-slide-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
