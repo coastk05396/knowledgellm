@@ -105,7 +105,7 @@ The prototype models three representative enterprise identities:
 
 - [x] All 3 personas authenticate with 1 click without credentials popup.
 - [x] Toast notification displays `${name} signed in successfully` with department accent color.
-- [x] Clicking Sam (Operations) reliably unlocks Operations folder, removes lock icon, and reveals operations documents.
+- [ ] Clicking Sam (Operations) reliably unlocks Operations folder, removes lock icon, and reveals operations documents.
 - [x] Clicking Alex (Finance) reliably unlocks Finance folder, removes lock icon, and reveals finance documents.
 - [x] Clicking Priya (People) reliably unlocks People folder, removes lock icon, and reveals people documents.
 - [x] Lock icon disappears only for permitted folder; other folders remain locked.
@@ -115,3 +115,26 @@ The prototype models three representative enterprise identities:
 - [x] Vitest test suite passes with 100% green tests.
 - [x] TypeScript build runs clean (`npm run build`).
 - [x] Infrastructure declared in Terraform and in sync with AWS (`0 changes`).
+
+---
+
+## 7. Required Fixes & Active Issues
+
+### Issue #1: Clicking Sam (Operations) Does Not Unlock Folder / Lock Icon Persists
+- **Status**: 🔴 Open / In Progress
+- **Reported Bug**: When clicking Sam (Operations) in the identity header, the Operations department folder does not unlock. The lock icon (`LockKeyhole`) remains visible, the document count badge does not display, and the operations files cannot be extended or viewed.
+- **Expected Behavior**:
+  1. Clicking Sam (`operations`) must authenticate Sam via Cognito `USER_PASSWORD_AUTH`.
+  2. The lock icon on the **Operations / Sam** folder must immediately disappear.
+  3. The document count badge (showing `2`) must appear in place of the lock icon.
+  4. The Operations folder must auto-expand to reveal both documents:
+     - `Runbook & procedures`
+     - `Service handoff`
+  5. The floating toast must confirm `Sam signed in successfully · Operations folder unlocked`.
+  6. Any previously unlocked folders (e.g. Finance) must re-lock with the lock icon.
+- **Fix Checklist**:
+  - [ ] Investigate persona click event propagation and identity state in `web/src/components/IdentityPicker.tsx` and `web/src/app/App.tsx`.
+  - [ ] Confirm `/documents` API response parsing and document state update for `operations` in `web/src/app/api.ts`.
+  - [ ] Verify `web/src/components/DepartmentFolders.tsx` evaluates `permitted = true` for `operations` and removes `<LockKeyhole />`.
+  - [ ] Verify automatic expansion state `expanded` cleanly reveals `#files-operations`.
+
