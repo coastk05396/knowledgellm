@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, LockKeyhole } from "lucide-react";
 export function Composer({
   onSend,
@@ -6,14 +6,22 @@ export function Composer({
   busy,
   name,
   access,
+  suggestion,
 }: {
   onSend: (question: string) => Promise<boolean>;
   disabled: boolean;
   busy: boolean;
   name: string;
   access: string;
+  suggestion?: { question: string } | null;
 }) {
   const [question, setQuestion] = useState("");
+  const input = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (suggestion === undefined) return;
+    setQuestion(suggestion?.question ?? "");
+    if (suggestion) input.current?.focus();
+  }, [suggestion]);
   const submit = async () => {
     if (!question.trim() || disabled || busy) return;
     if (await onSend(question.trim())) setQuestion("");
@@ -28,6 +36,7 @@ export function Composer({
         }}
       >
         <textarea
+          ref={input}
           aria-label="Your question"
           rows={1}
           maxLength={4000}

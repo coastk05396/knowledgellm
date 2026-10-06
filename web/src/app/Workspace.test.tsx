@@ -88,10 +88,10 @@ describe("Authorized knowledge workspace", () => {
       />,
     );
     expect(
-      await screen.findByText(
-        "Answers use only Finance files Alex can access.",
-      ),
-    ).toBeInTheDocument();
+      await screen.findByRole("button", {
+        name: "What is the total approved Q4 budget?",
+      }),
+    ).toBeVisible();
     expect(screen.getByText("Tap to switch")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(
