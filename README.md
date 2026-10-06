@@ -18,71 +18,51 @@ Built with **React / TypeScript / Vite**, **AWS Lambda (Python 3.12)**, **Amazon
 
 ## 🏗️ System Architecture & Request Lifecycle
 
-### Request & Caching Lifecycle
+![KnowledgeLLM Advanced RAG & Cache Architecture](docs/design/architecture/knowledgellm-rag-pipeline.svg)
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as 👤 Client (React)
-    participant Auth as 🔑 AWS Cognito
-    participant API as ⚡ API Gateway
-    participant Lambda as 🧠 Python Lambda
-    participant Cache as ⚡ DynamoDB Cache
-    participant RAG as 📐 Bedrock & Qdrant
-    participant LLM as 🤖 Groq LLM
+### Minimalist Terminal Architecture (End-to-End Flow)
 
-    User->>Auth: 1. Passwordless sign-in (Alex / Finance)
-    Auth-->>User: Issues verified JWT with department claims
-    User->>API: 2. POST /chat (Bearer Token + Question)
-    API->>Lambda: 3. Validates JWT signature & routes request
-
-    rect rgb(20, 50, 40)
-        Note over Lambda,Cache: FAST PATH (Cache Hit)
-        Lambda->>Cache: 4. Check exact-match key (SHA256)
-        Cache-->>Lambda: Hit: Returns pre-generated answer (~15ms)
-        Lambda-->>User: Instant 200 OK (0 tokens / $0 inference)
-    end
-
-    rect rgb(30, 35, 55)
-        Note over Lambda,LLM: FALLBACK PATH (Cache Miss / Custom Query)
-        Lambda->>RAG: 5a. Cohere 1024-dim query embedding
-        Lambda->>RAG: 5b. Department-scoped vector search
-        RAG-->>Lambda: Top 5 grounded document chunks
-        Lambda->>LLM: 6. Grounded prompt (temperature=0 + JSON schema)
-        LLM-->>Lambda: Answer + Citation IDs
-        Lambda->>Cache: 7. Async cache write (24h TTL)
-        Lambda-->>User: 200 OK + Verified Citations (~1.8s)
-    end
-```
-
-### Event-Driven Ingestion Flow (Document Sync Path)
-
-```mermaid
-flowchart LR
-    S3Docs[("📄 Private S3 Bucket\n(Markdown Files)")] -->|"Object Created"| EB["📡 EventBridge\n(Prefix Filter: finance/ ops/ people/)"]
-    EB --> IngestLambda["⚙️ Ingestion Lambda\n(Chunk & Vectorize)"]
-    IngestLambda -->|"Cohere 1024-dim"| Cohere["📐 AWS Bedrock Cohere"]
-    Cohere --> QdrantDB[("🔍 Qdrant Vector DB\n(Upsert Vectors)")]
-    IngestLambda -->|"Write Verified Manifests"| S3Docs
+```text
+  [ CLIENT (React) ] ──(Cognito JWT)──> [ API GATEWAY (JWT Authorizer) ] ──> [ ORCHESTRATOR LAMBDA ]
+                                                                                       │
+                                               ┌───────────────────────────────────────┴───────────────────────────────────────┐
+                                               ▼ [Fast Path: Cache HIT]                                                        ▼ [RAG Fallback: Cache MISS]
+                                      ┌────────────────────────────────┐                                              ┌────────────────────────────────┐
+                                      │    Amazon DynamoDB Cache       │                                              │      AWS Bedrock Cohere v3     │
+                                      │  (15 Prompts · SHA256 Key)     │                                              │   (1024-dim, ap-southeast-1)   │
+                                      │    ~15ms · 0 Tokens · $0       │                                              └───────────────┬────────────────┘
+                                      └────────────────┬───────────────┘                                                              │ Dense Vector [0.012, ...]
+                                                       │                                                                              ▼
+                                                       │                                                              ┌────────────────────────────────┐
+                                                       │                                                              │       Qdrant Vector DB         │
+                                                       │                                                              │  (Scoped Dept Payload Filter)  │
+                                                       │                                                              └───────────────┬────────────────┘
+                                                       │                                                                              │ Top 5 Scoped Chunks
+                                                       │                                                                              ▼
+                                                       │                                                              ┌────────────────────────────────┐
+                                                       │                                                              │         Groq Cloud LLM         │
+                                                       │                                                              │   (gpt-oss-20b · temp=0 JSON)  │
+                                                       │                                                              └───────────────┬────────────────┘
+                                                       │                                                                              │ Answer + Citations
+                                                       └───────────────────────────────┬──────────────────────────────────────────────┘
+                                                                                       ▼
+                                                                        [ 200 OK Grounded Response ]
 ```
 
 ---
 
-## 🛠️ Tech Stack Overview
+## 🍱 Architecture Bento Box (Component Breakdown)
 
 | Layer | Component | Tech Stack | Role & Key Metrics |
 |---|---|---|---|
-| **Frontend** | Web Client | **React 19, TypeScript, Vite** | Accessible UI, dark graphite theme, responsive mobile layout, 0 external UI libraries |
-| **Identity & Auth** | User Management | **Amazon Cognito User Pool** | Passwordless `CUSTOM_AUTH` persona switching, JWT token issuance |
-| **API Gateway** | Entrypoint | **API Gateway v2 (HTTP API)** | JWT signature & claims verification, low latency HTTP routing |
-| **Compute** | Serverless Backend | **AWS Lambda (Python 3.12)** | Stateless orchestration, PII masking, citation validation, request budgeting |
-| **Answer Cache** | Fast Path Storage | **Amazon DynamoDB** | **~15ms latency**, exact-match query hash, 24-hour TTL, PAY_PER_REQUEST |
-| **Embeddings** | Cloud Embeddings | **AWS Bedrock Cohere v3** | **1024-dimensional** embeddings, Singapore region (`ap-southeast-1`), <200ms latency |
-| **Vector Search** | Knowledge Retrieval | **Qdrant Cloud** | Cosine distance, department keyword payload filtering |
-| **LLM Inference** | Answer Generation | **Groq Cloud (`gpt-oss-20b`)** | Ultra-fast inference (<1s), strict JSON output schema, temperature=0 |
-| **Storage** | Document Lake | **Amazon S3** | Private encrypted storage, 120s presigned URLs for authorized citation links |
-| **Event Pipeline** | Ingestion Bus | **Amazon EventBridge** | Asynchronous S3 event bus with prefix filters (`finance/`, `operations/`, `people/`) |
-| **IaC** | Cloud Automation | **Terraform & AWS SAM** | Infrastructure declarations in `infra/terraform/` with remote state backend |
+| **01 · Identity** | Custom Demo Auth | **Amazon Cognito User Pool** | Passwordless 1-click persona switching (`finance`, `operations`, `people`) |
+| **02 · Gateway** | HTTP API Gateway | **API Gateway v2** | Server-side JWT signature & claims verification, low-latency routing |
+| **03 · Fast Path** | Answer Cache | **Amazon DynamoDB** | **~15ms latency**, 0 Groq tokens, 24h TTL for 15 hot demo questions |
+| **04 · Embeddings** | Managed Embeddings | **AWS Bedrock Cohere v3** | **1024-dim**, Singapore local (`ap-southeast-1`), eliminates 15s cold starts |
+| **05 · Vector DB** | Isolated Retrieval | **Qdrant Cloud** | Metadata-filtered vector search strictly bounded by authorized department |
+| **06 · Inference** | Grounded LLM | **Groq Cloud (`gpt-oss-20b`)** | Temperature=0, rigid JSON output schema, mandatory citation enforcement |
+| **07 · Ingestion** | Event-Driven Pipeline | **Amazon S3 + EventBridge** | Prefix-filtered triggers (`finance/`, etc.) with immutable completion manifests |
+| **08 · IaC** | Cloud Automation | **Terraform & AWS SAM** | Multi-resource orchestration with S3 remote state and automated packaging |
 
 ---
 
