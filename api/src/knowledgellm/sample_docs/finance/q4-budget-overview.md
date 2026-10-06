@@ -1,5 +1,7 @@
 # Northstar Finance — Q4 Operating Budget Overview
 
+> Fictional sample for public demonstration; not real company data or policy.
+
 ## 1. Executive Summary
 The Northstar Finance leadership team has finalized the revised Q4 operating budget following vendor contract negotiations and mid-year performance reviews. Total approved operational expenditure for the quarter is set at **108,000 credits**.
 

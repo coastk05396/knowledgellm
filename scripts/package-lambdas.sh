@@ -38,3 +38,13 @@ if uncompressed_size > limit:
 print(f"Uncompressed Lambda package: {uncompressed_size / (1024 * 1024):.1f} MiB")
 PY
 printf 'Created %s\n' "$package_zip"
+
+python3.12 - "$repo_root" <<'PY'
+from pathlib import Path
+import sys
+import zipfile
+root = Path(sys.argv[1])
+with zipfile.ZipFile(root / "build/demo-auth.zip", "w", compression=zipfile.ZIP_DEFLATED) as output:
+    output.write(root / "api/src/knowledgellm/auth_challenge.py", "auth_challenge.py")
+print("Created small standalone Cognito challenge Lambda package")
+PY

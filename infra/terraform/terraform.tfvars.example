@@ -11,3 +11,6 @@ qdrant_url             = "https://your-cluster.example.qdrant.io"
 # with placeholder values. You can update their values with your real keys via AWS Console or CLI.
 # qdrant_api_key_secret_arn = ""
 # groq_api_key_secret_arn   = ""
+
+# Public fictional demo personas only. Keep false for private production content.
+demo_mode = false

@@ -53,8 +53,8 @@ export function IdentityPicker({
         ))}
       </div>
       <span id="account-switch-note" className="sr-only">
-        Selecting an identity signs out and asks for the next user's
-        credentials. Access depends on the account you sign in with.
+        Selecting a demo identity starts Cognito custom authentication. Access
+        is limited to that persona's permitted sample documents.
       </span>
     </div>
   );

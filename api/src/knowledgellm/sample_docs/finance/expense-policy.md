@@ -1,5 +1,7 @@
 # Northstar Finance — Corporate Expense Policy
 
+> Fictional sample for public demonstration; not real company data or policy.
+
 ## 1. Overview & Policy Scope
 This policy outlines eligible business expenses for Northstar team members. All expenses must be legitimate, reasonable, and necessary business costs incurred on behalf of the company.
 

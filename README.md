@@ -1,6 +1,6 @@
 # KnowledgeLLM
 
-🔐 KnowledgeLLM is a permission-aware knowledge assistant prototype. Cognito manages username/password sign-in; a Python API applies Cognito group access before listing S3 documents or retrieving Qdrant chunks. Answers cite only approved, retrieved documents. The included content is fictional.
+🔐 KnowledgeLLM is a permission-aware knowledge assistant prototype. Cognito provides password-free demo sign-in and managed login; a Python API applies Cognito group access before listing S3 documents or retrieving Qdrant chunks. Answers cite only approved, retrieved documents. The included content is fictional.
 
 ## System Architecture & Tech Stack
 
@@ -154,13 +154,33 @@ python -m pip install -e '.[dev]'
 python -m pytest
 ```
 
-The frontend supports public Cognito configuration from environment variables; the current demo also includes deployed public endpoint defaults. Copy `web/.env.example` to `web/.env.local` and set `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI` from the deployed stack outputs. The current demo persona buttons sign in through Cognito password authentication and clear the previous workspace when switching. Managed login with authorization code and PKCE is also supported. Demo account credentials shipped in browser code are visible to users; use interactive sign-in for a production deployment. Provider API keys belong only in the backend.
+The frontend supports public Cognito configuration from environment variables; the current demo also includes deployed public endpoint defaults. Copy `web/.env.example` to `web/.env.local` and set `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI` from the deployed stack outputs. The demo persona buttons use Cognito `CUSTOM_AUTH` and automatically respond to the demo challenge without passwords or popups. Cognito issues the access token after its Define/Create/Verify triggers approve the fictional persona. Managed login with authorization code and PKCE is also supported. Provider keys and demo passwords never belong in frontend variables.
+
+## Password-free demo authentication
+
+```text
+Click persona → Cognito InitiateAuth (CUSTOM_AUTH, username only)
+                         ↓
+              Define → Create custom challenge
+                         ↓
+Browser automatically responds (public demo acknowledgement)
+                         ↓
+              Verify → Define issues tokens
+                         ↓
+Cognito Access Token → API Gateway JWT check → permitted department
+```
+
+One small, standalone Lambda handles the three Cognito challenge triggers. It accepts only `alex`, `sam`, and `priya`, and only when `DEMO_MODE` is exactly `true`. Terraform defaults `demo_mode = false`; set it to `true` only in ignored demo deployment configuration. The trigger has log permissions only, needs no SDK calls, and logs no user attributes or challenge data. Logs expire after 7 days. There is no demo-password SSM parameter or custom token-minting API. [AWS custom challenge documentation](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-lambda-challenge.html).
+
+**Public fictional demo:** selecting a persona is not proof of identity. Anyone can obtain any of the three sample accounts' tokens while demo mode is enabled. The public `ANSWER: "demo"` is an acknowledgement, not a credential. Private deployments must disable this path and use real authentication. Existing Cognito accounts may retain old password hashes; this refactor neither uses/stores their passwords nor deletes/recreates users. The app client disables direct password and SRP auth flows. Disabling demo mode stops new custom sign-ins, not existing JWTs before expiry.
+
+**Next: Cloudflare Turnstile Free plan (planned, not implemented).** The [Free plan](https://developers.cloudflare.com/turnstile/plans/) currently supports unlimited challenges with up to 20 widgets. Add a widget, send its token as the custom challenge answer, and verify it in the Verify trigger using Cloudflare Siteverify before approving authentication. Keep the secret server-side and validate hostname/action; reject missing, invalid, expired, or replayed tokens. The widget alone can be bypassed. Bot protection reduces abuse; it does not guarantee that bots cannot submit requests or replace authorization. See [mandatory server-side validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/).
 
 ## AWS prototype setup with Terraform
 
 Both Lambda functions configure `FASTEMBED_CACHE_PATH=/tmp/fastembed`, `HF_HOME=/tmp/huggingface`, and `HF_HUB_CACHE=/tmp/huggingface/hub`. FastEmbed also receives an explicit writable cache directory in code. This avoids model downloads writing to Lambda's read-only filesystem; caches are temporary per execution environment. Rebuild the Lambda package and apply the reviewed Terraform change before checking ingestion again. See [AWS ephemeral storage documentation](https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html).
 
-☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The Cognito app client has no client secret and supports the demo password flow and authorization code with PKCE. API Gateway validates JWTs; protected routes leave required OAuth scopes unset so Cognito password-flow access tokens can be used. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
+☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The Cognito app client has no client secret and supports custom demo authentication and authorization code with PKCE. API Gateway validates JWTs; protected routes leave required OAuth scopes unset so Cognito password-flow access tokens can be used. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
 
 Create Qdrant and Groq credentials outside the repository. The deployed Terraform stack stores them in standard SSM Parameter Store `SecureString` parameters. Supply values through ignored configuration or an approved deployment environment; never put keys in frontend variables. Existing secret identifiers can also be supplied through the configuration variables. To use a secure remote S3 backend for Terraform state in Singapore (`ap-southeast-1`), run the one-time bootstrap setup first:
 

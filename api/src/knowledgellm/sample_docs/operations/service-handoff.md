@@ -1,5 +1,7 @@
 # Northstar Operations — Shift Handoff & Service Continuity
 
+> Fictional sample for public demonstration; not real company data or policy.
+
 ## 1. Shift Schedule & Handoff Times
 To ensure uninterrupted 24/7 service coverage, operations shifts follow a structured handoff protocol:
 - **APAC to EMEA Handoff**: 08:00 UTC (16:00 SGT)
