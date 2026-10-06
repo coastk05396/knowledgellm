@@ -21,12 +21,14 @@ Brief: implement the approved [requirements](../PROMTS.md#cohere-migration-and-f
 | Shared catalog, Terraform/SAM, migration and operations tools | Infrastructure builder | Implemented and verified |
 | Integration and complete tests/build | Coordinator | Verified |
 | Independent source review | Product reviewer | Approved for PR preparation; corrected findings reread |
-| Separate signed PR | Coordinator | Ready for submission; no deployment or merging |
+| Separate signed PR | Coordinator | Submitted as [PR #15](https://github.com/coastk05396/knowledgellm/pull/15); no deployment or merging |
 
 Decisions: DynamoDB on-demand with 24-hour read-checked expiry; cache gate defaults off; exact trimmed question matching; S3-version completion manifests; separate 1024-dimensional Qdrant collection; Groq remains the generator. The UI continues displaying the same 15 questions.
 
 Verification: Python 3.12 backend suite **139 passed**; frontend suite **45 passed** across eight files; type-checked production build and changed-file Prettier checks passed. Terraform formatting/validation and SAM lint validation passed. A read-only plan against the existing remote state passed: **1 add, 7 changes, 0 destroys**, with caching disabled. Terraform's stale SSO cache was bridged using existing AWS CLI credentials only in subprocess memory; no credentials were printed or saved. Rebuilt ZIP is **105.4 MiB** uncompressed, includes the shared catalog, and excludes FastEmbed/ONNX. Migration/evaluation dry runs cover six document keys and 15 questions (45 planned requests). `git diff --check` passed.
 
 Independent review: the read-only reviewer approved the source change after rereading fixes for the verifier's token fields, provider timeouts/request budget, and frontend enum validation. Reviewer checks were source inspection and diff checks; tests/builds above were run by builders/coordinator. See [review evidence](cohere-demo-cache-review.md). Initial provider/version writes preceded the later test-first instruction; subsequent corrective behavior included observed failing-to-passing tests.
+
+Delivery: implementation commit `2c660cc` has a locally verified SSH signature and was pushed in PR #15 targeting `main`. The original UI worktree stayed clean and on its existing branch. Generated packages, Terraform initialization files, and credentials are excluded from Git.
 
 No AWS deployment, index migration, cache enabling, or live Bedrock/Qdrant/Groq calls occurred. All 15 live retrieval/grounding checks, invocation metrics, a second Lambda environment, and actual latency measurements remain pending approved rollout. The remote plan includes rebuilt standalone auth ZIP metadata; authentication source/behavior is unchanged. See [migration operations](cohere-demo-cache-operations.md) for the gated rollout and rollback procedure.
