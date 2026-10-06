@@ -14,8 +14,9 @@ __pycache__/
 .venv/
 .test-deps/
 build/
-.terraform/
-terraform.tfstate
-terraform.tfstate.backup
-*.tfplan
-terraform.tfvars
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/*.tfvars
+!**/*.tfvars.example

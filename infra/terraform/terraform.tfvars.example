@@ -1,9 +1,13 @@
-aws_region             = "us-east-1"
+aws_region             = "ap-southeast-1"
 project_name           = "knowledgellm-demo"
 cognito_domain_prefix  = "choose-a-globally-unique-prefix"
 web_origin             = "http://localhost:5173"
 web_callback_url       = "http://localhost:5173/"
 web_logout_url         = "http://localhost:5173/"
 qdrant_url             = "https://your-cluster.example.qdrant.io"
-qdrant_api_key_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:qdrant-key"
-groq_api_key_secret_arn   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:groq-key"
+
+# Optional: If left blank or omitted, Terraform automatically creates free SSM SecureString
+# parameters (/knowledgellm-demo/qdrant-api-key and /knowledgellm-demo/groq-api-key)
+# with placeholder values. You can update their values with your real keys via AWS Console or CLI.
+# qdrant_api_key_secret_arn = ""
+# groq_api_key_secret_arn   = ""

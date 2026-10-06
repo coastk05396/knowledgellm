@@ -1,17 +1,43 @@
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
+resource "aws_ssm_parameter" "groq_api_key" {
+  count       = var.groq_api_key_secret_arn == "" ? 1 : 0
+  name        = "/${var.project_name}/groq-api-key"
+  description = "Groq Cloud API Key for KnowledgeLLM"
+  type        = "SecureString"
+  value       = "CHANGE_ME"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+resource "aws_ssm_parameter" "qdrant_api_key" {
+  count       = var.qdrant_api_key_secret_arn == "" ? 1 : 0
+  name        = "/${var.project_name}/qdrant-api-key"
+  description = "Qdrant Cloud API Key for KnowledgeLLM"
+  type        = "SecureString"
+  value       = "CHANGE_ME"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 locals {
-  lambda_package = abspath("${path.module}/${var.lambda_package_path}")
-  cognito_issuer = "https://cognito-idp.${var.aws_region}.${data.aws_partition.current.dns_suffix}/${aws_cognito_user_pool.users.id}"
+  lambda_package     = abspath("${path.module}/${var.lambda_package_path}")
+  cognito_issuer     = "https://cognito-idp.${var.aws_region}.${data.aws_partition.current.dns_suffix}/${aws_cognito_user_pool.users.id}"
+  qdrant_api_key_arn = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
+  groq_api_key_arn   = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
   common_environment = {
     PYTHONPATH                       = "/var/task/src"
     DOCUMENTS_BUCKET                 = aws_s3_bucket.documents.id
     QDRANT_URL                       = var.qdrant_url
-    QDRANT_API_KEY_SECRET_ARN        = var.qdrant_api_key_secret_arn
+    QDRANT_API_KEY_SECRET_ARN        = local.qdrant_api_key_arn
     QDRANT_COLLECTION                = "knowledgellm"
     EMBEDDING_MODEL                  = "sentence-transformers/all-MiniLM-L6-v2"
-    GROQ_API_KEY_SECRET_ARN          = var.groq_api_key_secret_arn
+    GROQ_API_KEY_SECRET_ARN          = local.groq_api_key_arn
     GROQ_MODEL                       = var.groq_model
     GROQ_INPUT_RATE_PER_MILLION_USD  = var.groq_input_rate_per_million_usd
     GROQ_OUTPUT_RATE_PER_MILLION_USD = var.groq_output_rate_per_million_usd
@@ -20,7 +46,7 @@ locals {
     PYTHONPATH                = "/var/task/src"
     DOCUMENTS_BUCKET          = aws_s3_bucket.documents.id
     QDRANT_URL                = var.qdrant_url
-    QDRANT_API_KEY_SECRET_ARN = var.qdrant_api_key_secret_arn
+    QDRANT_API_KEY_SECRET_ARN = local.qdrant_api_key_arn
     QDRANT_COLLECTION         = "knowledgellm"
     EMBEDDING_MODEL           = "sentence-transformers/all-MiniLM-L6-v2"
   }
@@ -174,9 +200,12 @@ resource "aws_iam_role_policy" "knowledge" {
         Resource = "${aws_s3_bucket.documents.arn}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = [var.qdrant_api_key_secret_arn, var.groq_api_key_secret_arn]
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "ssm:GetParameter"
+        ]
+        Resource = [local.qdrant_api_key_arn, local.groq_api_key_arn]
       }
     ]
   })
@@ -199,9 +228,12 @@ resource "aws_iam_role_policy" "ingestion" {
         Resource = "${aws_s3_bucket.documents.arn}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = [var.qdrant_api_key_secret_arn]
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "ssm:GetParameter"
+        ]
+        Resource = [local.qdrant_api_key_arn]
       }
     ]
   })

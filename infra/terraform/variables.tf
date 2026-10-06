@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for the prototype resources."
   type        = string
-  default     = "us-east-1"
+  default     = "ap-southeast-1"
 }
 
 variable "project_name" {
@@ -47,13 +47,17 @@ variable "qdrant_url" {
 }
 
 variable "qdrant_api_key_secret_arn" {
-  description = "ARN of the Qdrant API key secret in Secrets Manager."
+  description = "ARN of the Qdrant API key secret in Secrets Manager or SSM Parameter Store. If left blank, Terraform creates a free SSM parameter."
   type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "groq_api_key_secret_arn" {
-  description = "ARN of the Groq API key secret in Secrets Manager."
+  description = "ARN of the Groq API key secret in Secrets Manager or SSM Parameter Store. If left blank, Terraform creates a free SSM parameter."
   type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "groq_model" {
