@@ -4,6 +4,8 @@
 
 Built with **React / TypeScript / Vite**, **AWS Lambda (Python 3.12)**, **Amazon Cognito**, **Amazon DynamoDB**, **AWS Bedrock (Cohere Multilingual v3)**, **Qdrant Cloud**, and **Groq Cloud LLM**, fully provisioned with **Terraform**.
 
+![KnowledgeLLM RAG Pipeline](docs/design/architecture/rag-pipeline.png)
+
 ---
 
 ## ⚡ Key Engineering Highlights (Portfolio Focus)
@@ -16,11 +18,15 @@ Built with **React / TypeScript / Vite**, **AWS Lambda (Python 3.12)**, **Amazon
 
 ---
 
-## 🏗️ System Architecture & Request Lifecycle
+## 🏗️ System Architecture & Design Options
+
+KnowledgeLLM presents two architectural designs: the **Active Hybrid Demo** (optimized for low running costs, sub-20ms cache latency, and fast iteration) and the **All-AWS Enterprise Reference** (leveraging fully managed AWS native services).
+
+### 1. Active Hybrid Demo (Deployed Stack)
 
 ![KnowledgeLLM Advanced RAG & Cache Architecture](docs/design/architecture/knowledgellm-rag-pipeline.svg)
 
-### Minimalist Terminal Architecture (End-to-End Flow)
+#### Request Lifecycle & Data Flow
 
 ```text
   [ CLIENT (React) ] ──(Cognito JWT)──> [ API GATEWAY (JWT Authorizer) ] ──> [ ORCHESTRATOR LAMBDA ]
@@ -48,6 +54,16 @@ Built with **React / TypeScript / Vite**, **AWS Lambda (Python 3.12)**, **Amazon
                                                                                        ▼
                                                                         [ 200 OK Grounded Response ]
 ```
+
+### 2. All-AWS Managed Enterprise Reference
+
+For enterprise environments requiring centralized compliance, sovereign data boundaries, and pure AWS native operations:
+
+![KnowledgeLLM All-AWS Managed Reference Architecture](docs/design/architecture/knowledgellm-all-aws-architecture.webp)
+
+- **Frontend & Identity**: Route 53 + AWS Amplify Hosting with Amazon Cognito User Pools for SSO and RBAC.
+- **Managed RAG**: Amazon Bedrock Knowledge Bases paired with Amazon OpenSearch Serverless (AOSS) and Titan Embeddings V2.
+- **Orchestration & Guardrails**: Amazon Bedrock Guardrails (automated PII masking & content filtering) with Nova Pro inference and Step Functions ingestion orchestration.
 
 ---
 
