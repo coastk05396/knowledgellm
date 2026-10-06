@@ -10,54 +10,49 @@ KnowledgeLLM has two architecture options. **Option A is the current cost-consci
 
 The AWS backend is deployed in Singapore (`ap-southeast-1`), engineered for low latency, zero-trust department isolation, and cost efficiency.
 
+#### 1. Real-Time Query & Answer Flow (User Request Path)
+
 ```mermaid
-flowchart TD
-    subgraph Client ["01 · Frontend & Identity"]
-        User["Client (React / Vite)"]
-        Cognito["Amazon Cognito (Custom Auth)"]
-        User <-->|"1. Passwordless Auth (JWT)"| Cognito
+flowchart LR
+    subgraph Auth ["01 · Client & Identity"]
+        UI["💻 React / Vite\n(Browser)"]
+        Cognito["🔑 AWS Cognito\n(Custom Auth)"]
+        UI <-->|"Passwordless\nAuth"| Cognito
     end
 
-    subgraph Gateway ["02 · API Gateway"]
-        APIGW["HTTP API Gateway (JWT Authorizer)"]
-        User -->|"2. Bearer Token + Question"| APIGW
+    subgraph Gateway ["02 · Gateway"]
+        APIGW["⚡ HTTP API Gateway\n(JWT Authorizer)"]
+        UI -->|"Bearer Token\n+ Question"| APIGW
     end
 
-    subgraph Backend ["03 · Serverless Orchestrator"]
-        Lambda["Knowledge Lambda (Python 3.12)"]
-        APIGW -->|"3. Authorized Request"| Lambda
-        DynamoDB[("DynamoDB Answer Cache\n(Exact-Match 15 Questions)")]
-        Lambda <-->|"4. Check Cache"| DynamoDB
+    subgraph Core ["03 · Serverless Orchestrator"]
+        Lambda["🧠 Knowledge Lambda\n(Python 3.12)"]
+        APIGW --> Lambda
+        Cache[("⚡ DynamoDB Cache\n(15 Exact Prompts)")]
+        Lambda <-->|"HIT: ~15ms\n0 Tokens / $0"| Cache
     end
 
     subgraph RAG ["04 · RAG Pipeline (On Cache Miss)"]
-        Bedrock["AWS Bedrock (Cohere Multilingual v3)"]
-        Qdrant[("Qdrant Cloud\n(Department-Filtered Vectors)")]
-        Groq["Groq Cloud LLM\n(Grounded JSON + Citations)"]
-        
-        Lambda -->|"5a. Query Embedding (1024-dim)"| Bedrock
-        Lambda -->|"5b. Scoped Vector Search"| Qdrant
-        Lambda -->|"5c. Grounded Generation"| Groq
-    end
+        Bedrock["📐 Bedrock Cohere v3\n(1024-dim Embedding)"]
+        Qdrant[("🔍 Qdrant Cloud\n(Scoped Chunks)")]
+        Groq["🤖 Groq Cloud LLM\n(gpt-oss-20b)"]
 
-    subgraph Ingestion ["05 · Event-Driven Ingestion"]
-        S3[("Private S3 Bucket\n(Markdown Docs)")]
-        EB["EventBridge (Prefix Filter)"]
-        IngestLambda["Ingestion Lambda (Chunk + Embed)"]
-        
-        S3 -->|"Object Created"| EB
-        EB --> IngestLambda
-        IngestLambda -->|"Cohere Embeddings"| Bedrock
-        IngestLambda -->|"Upsert Vectors"| Qdrant
-        IngestLambda -->|"Write Manifests"| S3
+        Lambda -->|"MISS"| Bedrock
+        Bedrock --> Qdrant
+        Qdrant --> Groq
+        Groq -->|"JSON + Citations"| Lambda
     end
+```
 
-    classDef aws fill:#232f3e,stroke:#ff9900,stroke-width:2px,color:#fff;
-    classDef ext fill:#1a1f2c,stroke:#4f46e5,stroke-width:2px,color:#fff;
-    classDef client fill:#111827,stroke:#10b981,stroke-width:2px,color:#fff;
-    class User,Cognito client;
-    class APIGW,Lambda,DynamoDB,Bedrock,S3,EB,IngestLambda aws;
-    class Qdrant,Groq ext;
+#### 2. Event-Driven Ingestion Flow (Document Sync Path)
+
+```mermaid
+flowchart LR
+    S3Docs[("📄 Private S3 Bucket\n(Markdown Files)")] -->|"Object Created"| EB["📡 EventBridge\n(Prefix Filter: finance/ ops/ people/)"]
+    EB --> IngestLambda["⚙️ Ingestion Lambda\n(Chunk & Vectorize)"]
+    IngestLambda -->|"Cohere 1024-dim"| Cohere["📐 AWS Bedrock Cohere"]
+    Cohere --> QdrantDB[("🔍 Qdrant Vector DB\n(Upsert Vectors)")]
+    IngestLambda -->|"Write Verified Manifests"| S3Docs
 ```
 
 ```text
