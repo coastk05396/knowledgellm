@@ -10,7 +10,7 @@ KnowledgeLLM has two architecture options. **Option A is the current cost-consci
 
 The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs locally today; Cloudflare Pages with a custom domain is planned. FastEmbed runs on Lambda CPU, Qdrant stores department-tagged vectors, and Groq generates grounded answers. The application owns chunking, access filters, PII patterns, and citation validation.
 
-![Cost-conscious KnowledgeLLM system architecture, showing AWS authentication and Lambda, external Qdrant and Groq, separate ingestion, and planned Cloudflare hosting.](docs/design/architecture/knowledgellm-rag-pipeline.png)
+![Hand-drawn KnowledgeLLM demo architecture: Cognito Custom Auth, FastEmbed, department-filtered Qdrant retrieval, Groq, and separate S3 ingestion.](docs/design/architecture/knowledgellm-rag-pipeline.webp)
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -60,7 +60,7 @@ The AWS backend is deployed in Singapore (`ap-southeast-1`). React/Vite runs loc
 
 **Proposed only.** Host React on Amplify, authenticate with Cognito, and keep orchestration in Lambda. Replace FastEmbed with Titan Text Embeddings V2, Qdrant with OpenSearch Serverless, and Groq with an Amazon Nova model on Bedrock. Knowledge Bases manages document parsing/chunking and retrieval; Step Functions plus Lambda starts and monitors ingestion jobs. [Amplify hosting](https://aws.amazon.com/amplify/hosting/), [Titan embeddings](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-titan-text-embeddings-v2.html).
 
-![Proposed all-AWS KnowledgeLLM architecture, with Amplify, Cognito, Lambda, Bedrock Knowledge Bases and Guardrails, Titan embeddings, OpenSearch Serverless, and AWS ingestion and operations services.](docs/design/architecture/knowledgellm-all-aws-architecture.png)
+![Proposed, undeployed all-AWS KnowledgeLLM architecture with AWS service icons and separate frontend, API, managed RAG, ingestion, and security component boundaries.](docs/design/architecture/knowledgellm-all-aws-architecture.webp)
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
