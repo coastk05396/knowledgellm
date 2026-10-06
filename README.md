@@ -30,15 +30,6 @@ Built with **React / TypeScript / Vite** · **AWS Lambda (Python 3.12)** · **Am
 
 ---
 
-## ⚡ Key Engineering Highlights
-
-| # | Highlight | Detail |
-|---|-----------|--------|
-| 1 | **Sub-20 ms Cached Inferences** | Exact-match DynamoDB Cache-Aside for hot prompts — **99 % latency reduction** (~15 ms vs ~1.8 s), zero repeated LLM token costs |
-| 2 | **Cold-Start Elimination (15 s → <200 ms)** | Migrated to **AWS Bedrock Cohere Multilingual v3 (1 024-dim)** in `ap-southeast-1`, eliminating CPU-bound container cold starts |
-| 3 | **Zero-Trust RBAC** | Cognito JWT groups (`finance` / `operations` / `people`) enforced at both Qdrant vector retrieval **and** citation validation stages |
-| 4 | **Zero Hallucination Guardrails** | `temperature=0`, rigid JSON output schema, backend validates every cited document ID against permitted excerpt context |
-| 5 | **Event-Driven Ingestion** | S3 upload → EventBridge prefix-filtered rule → Ingestion Lambda → Qdrant upsert + immutable **S3 completion manifest** |
 
 ---
 
@@ -49,47 +40,6 @@ KnowledgeLLM ships two architectural designs: the **Active Hybrid Demo** (cost-c
 ### 1 · Active Hybrid Demo (Deployed Stack)
 
 ![KnowledgeLLM Advanced RAG & Cache Architecture](docs/design/architecture/knowledgellm-rag-pipeline.svg)
-
-#### System Architecture Overview
-
-```
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║               System Architecture & Tech Stack  ·  Cost-conscious demo                          ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
-
-  ── AUTH ─────────────────────────────────────────────────────────────────────────────────────────
-
-  ┌───────────────┐   ◄──►   ┌──────────────────────────┐   ◄──►   ┌───────────────────────────┐
-  │  React / Vite │          │  Cognito  CUSTOM_AUTH     │          │  Demo challenge Lambda    │
-  └───────┬───────┘          └──────────────────────────┘          └───────────────────────────┘
-          │
-          │  Access token ──► API Gateway ──► Python Lambda
-          │                                          │
-  ── RAG QUERY ─────────────────────────────────────┼──────────────────────────────────────────────
-          │                                          ▼
-  ┌───────┴───────┐   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────────────┐
-  │   Question    │──►│  FastEmbed       │──►│  Qdrant Cloud    │──►│ ┌────────────────────┐   │
-  └───────────────┘   │  Lambda CPU      │   │  Department      │   │ │   System prompt    │   │
-                      └──────────────────┘   │  filter          │   │ ├────────────────────┤   │
-                                             └──────────────────┘   │ │  Permitted chunks  │──►│──► ┌────────┐   ┌──────────────┐
-                                                      ▲  Retrieval  │ ├────────────────────┤   │    │  Groq  │──►│  Answer +    │
-                                                      │             │ │     Question        │   │    └────────┘   │  sources     │
-                                                      │             │ └────────────────────┘   │                 └──────────────┘
-                                                      │             └──────────────────────────┘
-  ── INGESTION ─────────────────────────────────────────────────────────────────────────────────────
-                                                      │
-  ┌───────────────┐   ┌──────────────────┐   ┌───────┴──────────┐
-  │  Private S3   │──►│  EventBridge     │──►│  Ingestion Lambda│
-  └───────────────┘   └──────────────────┘   │  + FastEmbed     │
-                                             └──────────────────┘
-
-  ── LEGEND ────────────────────────────────────────────────────────────────────────────────────────
-
-  ┌──────────────────────────┐  ┌───────────────────────┐  ┌──────────────────────────┐  ┌────────────────────────┐
-  │  Input / output          │  │  SSM:                 │  │  CloudWatch:             │  │  Cloudflare Pages:     │
-  │  PII + citation checks   │  │  provider keys only   │  │  usage + guardrails      │  │  planned               │
-  └──────────────────────────┘  └───────────────────────┘  └──────────────────────────┘  └────────────────────────┘
-```
 
 #### Request Lifecycle & Cache / RAG Flow
 
