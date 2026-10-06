@@ -15,17 +15,9 @@ Supersedes the backend `/demo-token` and SSM demo-password approach. Use Cognito
 - [x] Deploy through reviewed Terraform plans; all three personas receive only their two department documents.
 Release follows the repository signed-commit/PR workflow; exclude the unrelated PROMPT.md deletion.
 
-## Next: Cloudflare Turnstile free plan
+## Requirements and Next Work
 
-- [ ] Add a Turnstile widget to the frontend; preserve one-click switching when a valid token is ready.
-- [ ] Send the Turnstile token as the custom challenge answer.
-- [ ] Verify it inside VerifyAuthChallengeResponse with Cloudflare Siteverify; fail closed.
-- [ ] Keep only the site key public; store the Turnstile secret on the backend.
-- [ ] Validate expected hostname/action and reject missing, expired, replayed, invalid tokens and provider failures.
-- [ ] Declare supporting infrastructure/configuration in Terraform; confirm current Free plan limits before enabling.
-- [ ] Keep Cognito quotas and cost monitoring: Turnstile validation happens after initial requests/triggers and cannot eliminate all request costs or bots.
-
-Frontend-only Turnstile is bypassable. Demo personas remain public even with bot protection. Do not expose private production documents. No OTP, magic link, paid Cognito feature upgrade, or Turnstile deployment is part of the current task.
+Current authentication requirements and the Turnstile TODO list live in [PROMTS.md](../../../PROMTS.md). This document records completed implementation and verification.
 
 ## Verification notes
 

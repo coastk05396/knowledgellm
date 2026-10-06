@@ -1,10 +1,10 @@
-# KnowledgeLLM Full-Stack Prototype Implementation Plan
+# KnowledgeLLM Full-Stack Prototype Implementation History
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Historical record of the initial prototype and follow-up work. Current requirements and TODOs live in [PROMTS.md](../../../PROMTS.md).
 
 **Goal:** Build a local runnable, responsive KnowledgeLLM prototype with Cognito username/password login, department-scoped document access, and cited answers.
 
-**Architecture:** See the [product spec](../specs/2026-10-06-knowledgellm-design.md#architecture) for the current deployment design. The implemented Vite React app uses Cognito managed login authorization-code flow with PKCE and calls an API Gateway HTTP API. The API trusts only API Gateway JWT-authorizer claims, applies department policy before S3 reads or Qdrant retrieval, and passes authorized chunks through PII and grounding guardrails before Groq generation. A separate S3-triggered Lambda indexes synthetic Markdown samples into Qdrant.
+**Historical architecture:** See [PROMTS.md](../../../PROMTS.md) for current requirements and README for current architecture. The implemented Vite React app uses Cognito managed login authorization-code flow with PKCE and calls an API Gateway HTTP API. The API trusts only API Gateway JWT-authorizer claims, applies department policy before S3 reads or Qdrant retrieval, and passes authorized chunks through PII and grounding guardrails before Groq generation. A separate S3-triggered Lambda indexes synthetic Markdown samples into Qdrant.
 
 **Tech Stack:** TypeScript, React, Vite, `oidc-client-ts`; Python 3.12, pytest, boto3, FastEmbed, Qdrant client, Groq SDK; Terraform for AWS deployment (the initial implementation used SAM); Vitest and Testing Library for web.
 
@@ -12,26 +12,9 @@
 
 **Status:** Tasks 1–6 record the completed initial implementation, including historical SAM work. Terraform is the current deployment path; use [README](../../../README.md#aws-prototype-setup-with-terraform) for commands. Public deployment remains pending.
 
-## Global Constraints
+## Requirements Ownership
 
-- Never handle or store Cognito passwords in the web app; use Cognito managed login with authorization-code flow and PKCE.
-- Derive access only from verified API Gateway JWT claims; ignore user-supplied department, role, identity, and filters.
-- Do not reveal unauthorized document names/counts, read their content, retrieve their chunks, or send them to Groq.
-- Keep S3 private and authorize before returning a short-lived object URL.
-- Use synthetic documents; never add secrets or real personal/company data.
-- Fail closed when authentication, authorization, PII checks, retrieval, or provider calls fail.
-- Do not provision cloud resources; deployment instructions must state configuration and cost review requirements.
-- Match the supplied references and support keyboard use, reduced motion, and 44px touch targets.
-
-## Review Focus
-
-- Missing, malformed, or empty Cognito groups: return no protected documents and do not query providers.
-- Forged department in query/body: ignore it and use only authorizer groups.
-- Empty or malformed document contents and prompt injection in retrieved content: refuse unsupported answers; never treat source text as instructions.
-- PII-like user input and provider output: redact/block before generation/output and never log raw prompts or chunks.
-- Provider timeout, rate limit, and missing usage fields: return retryable safe errors and show cost as unavailable.
-
----
+All current requirements and constraints live in [PROMTS.md](../../../PROMTS.md). The following tasks and results are historical records; authentication decisions were superseded by Cognito Custom Auth.
 
 ### Task 1: Project Scaffold and Synthetic Content
 
@@ -148,43 +131,14 @@ Ruling: Qdrant document IDs are opaque single path segments while S3 keys retain
 
 ## Deployment and demo checklist
 
-These tasks are pending. Use the linked README instructions for commands and configuration; check an item only after verifying it in the target environment.
-
-### Before deployment
-
-- [ ] Confirm AWS account, region, Free Tier eligibility, and current AWS/Cloudflare/Qdrant/Groq prices, quotas, and data handling terms.
-- [ ] Set a billing alert; choose a unique Cognito prefix and a stable Pages/custom-domain origin.
-- [ ] Create provider keys and store them using the [AWS setup instructions](../../../README.md#aws-prototype-setup-with-terraform).
-- [ ] Configure ignored Terraform values, build the Lambda package, and review the plan for expected resources only.
-
-### AWS and Cloudflare setup
-
-- [ ] Provision the reviewed AWS stack using the [Terraform instructions](../../../README.md#aws-prototype-setup-with-terraform).
-- [ ] Create each demo user in exactly one department group and upload only fictional sample documents under matching prefixes.
-- [ ] Connect the repository to Pages and configure its build using [Cloudflare setup](../../../README.md#cloudflare-pages-setup).
-- [ ] Configure public frontend variables and matching Terraform CORS/callback/logout URLs, then rebuild.
-- [ ] Attach the custom domain and verify DNS/HTTPS; repeat URL configuration and checks if the domain changes.
-
-### Live acceptance and observability
-
-- [ ] Exercise the [spec's acceptance criteria](../specs/2026-10-06-knowledgellm-design.md#acceptance-criteria) for all three users, account switching, department isolation, citations, desktop/mobile controls, and page refresh.
-- [ ] Ask a normal question and check CloudWatch token counts, estimated cost, latency, department, and guardrail outcome using the [README queries](../../../README.md#chat-observability).
-- [ ] Submit email/phone/SSN patterns and verify input redaction, retrieved-source redaction, and blocked PII output without logging protected text.
-- [ ] Verify both Lambda log groups have seven-day retention and contain no questions, answers, document text, or PII.
-- [ ] Review billing and shared CloudWatch allowance usage after the demo; record results here.
-
-### Cleanup
-
-- [ ] Remove the Pages project and its associated custom-domain DNS records when no longer needed.
-- [ ] Empty all S3 document versions and destroy the AWS stack using [cleanup instructions](../../../README.md#cleanup).
-- [ ] Remove externally created demo secrets, provider keys, and Qdrant clusters when no longer needed.
+The current checklist is maintained only in [PROMTS.md](../../../PROMTS.md#deployment-and-demo-checklist).
 
 ## Historical local verification
 
 These results were recorded during the initial prototype implementation on 2026-10-06. They have not been rerun for this documentation reorganization. SAM checks apply to the earlier deployment path, not the current Terraform stack.
 
 - AWS Cognito documentation confirms managed login accepts username/password and `prompt=login` requests re-authentication: [authorization endpoint](https://docs.aws.amazon.com/cognito/latest/developerguide/authorization-endpoint.html).
-- Reference images are checked in under `docs/design/reference/`.
+- The original reference screenshots were removed during documentation cleanup; README retains the current architecture diagrams.
 - `web/`: `npm test -- --run` passes (18 tests); `npm run build` passes with TypeScript checking; Prettier check and `npm audit --audit-level=moderate` pass. Chromium screenshots at 390px and 1440px previously showed no horizontal overflow; account switching, keyboard folder controls, citations, and New chat were exercised.
 - `api/`: Python 3.12 pytest passes (37 tests) with pytest isolated under `/tmp/knowledgellm-test-deps`; runtime dependencies are supplied by the SAM build environment. `compileall` passes.
 - `template.yaml`: `cfn-lint`, `sam validate --lint`, and `sam build` pass. Each function build directory is 230,640,497 bytes, under Lambda's 262,144,000-byte uncompressed package limit with roughly 31 MB of headroom.
@@ -202,7 +156,7 @@ These results were recorded during the initial prototype implementation on 2026-
 - [x] Pass an explicit `/tmp` FastEmbed cache directory in the shared chat/ingestion factory and declare FastEmbed/Hugging Face cache paths in both Terraform Lambda environments.
 - [x] Verify frontend tests (25 passed), production build, changed-file formatting, and Terraform validation. The affected provider/ingestion/chat/handler tests pass (26 tests), including cache regressions that failed before the fix.
 - [x] Exercise real Cognito logins for Alex, Sam, and Priya at both local origins. Each sees two documents only from its department. A simulated rejected document request leaves every folder locked and no verified identity badge.
-- [x] Capture [desktop](../../design/verification/2026-10-06-cognito-verified-desktop.png) and [mobile](../../design/verification/2026-10-06-cognito-verified-mobile.png) previews. Browser review was performed by the implementer; no independent review was run.
+- [x] Capture desktop (historical screenshot removed) and mobile (historical screenshot removed) previews. Browser review was performed by the implementer; no independent review was run.
 - [ ] Rebuild and deploy the reviewed Lambda package and Terraform cache settings; re-upload an approved fictional document and confirm ingestion writes vectors to Qdrant without read-only filesystem errors.
 
 Existing checks needing follow-up: the full backend suite reports 41 passed and 2 failures in unchanged department-claim and sample-content tests. Repository-wide Prettier reports unchanged `App.test.tsx`, `auth.ts`, and `Toast.test.tsx`; formatting passes for this change's frontend files. These issues also exist on the starting `origin/main` revision. The cache fix has not been deployed to AWS or verified with a real model download in Lambda.
@@ -220,7 +174,7 @@ The UI monitor currently waits for a successful chat response: failed requests l
 - [x] Configure the existing Terraform rate variables in ignored local configuration: input $0.075 and output $0.30 per million tokens, from [Groq's published model rates](https://console.groq.com/docs/models), checked 2026-10-06. Apply changes to the knowledge Lambda only. This configures list-price estimates and does not enroll in a paid plan or verify the account's billing tier.
 - [x] Verify live Cognito sign-in and `/chat` in the browser: budget answer returns HTTP 200 with the authorized Q4 source citation, 1,063 input tokens, 337 output tokens, and estimated $0.000180825. An email-pattern question is refused before generation. CloudWatch records `pass` and `question_pii_blocked` with no protected text.
 - [x] Fix the UI's session-cost reset on a response without a cost estimate. The regression test failed before the fix; all 26 frontend tests and the production build now pass. A live browser rerun retains `$0.0002 est.` after the refusal.
-- [x] Capture the [live chat and monitor preview](../../design/verification/2026-10-06-live-chat-monitor.png).
+- [x] Capture the live chat and monitor preview (historical screenshot removed).
 
 The earlier pending cache deployment is now completed. Direct invocation verifies ingestion; the S3/EventBridge trigger was previously confirmed and was not retriggered by rewriting documents. Live checks above cover Finance and input PII refusal; output PII and full cross-department chat verification remain separate acceptance checks. Changes are submitted in [PR #5](https://github.com/coastk05396/knowledgellm/pull/5); no merge was performed.
 
@@ -233,7 +187,7 @@ The earlier pending cache deployment is now completed. Direct invocation verifie
 
 This frontend change builds on PR #5 and does not modify AWS infrastructure.
 
-Previews: [desktop](../../design/verification/2026-10-06-question-shortcuts-desktop.png) and [mobile](../../design/verification/2026-10-06-question-shortcuts-mobile.png). Formatting checks pass for the changed frontend files.
+Previews: desktop (historical screenshot removed) and mobile (historical screenshot removed). Formatting checks pass for the changed frontend files.
 
 ### PII guardrail monitor integration
 
@@ -245,4 +199,4 @@ Previews: [desktop](../../design/verification/2026-10-06-question-shortcuts-desk
 
 This branch builds on PR #6. Manual demo: submit a fictional question containing `demo@example.com`; the expected response refuses personal details and the monitor reads Question PII blocked. Broader entity detection and unrelated-question handling are separate concerns.
 
-PII monitor previews: [desktop](../../design/verification/2026-10-06-guardrail-status-desktop.png) and [mobile](../../design/verification/2026-10-06-guardrail-status-mobile.png), captured in the initial Awaiting question state. End-to-end status scenarios were not rerun for this change.
+PII monitor previews: desktop (historical screenshot removed) and mobile (historical screenshot removed), captured in the initial Awaiting question state. End-to-end status scenarios were not rerun for this change.
