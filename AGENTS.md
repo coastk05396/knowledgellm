@@ -23,3 +23,17 @@ There is no Git history from which to infer an established commit style. Use sig
 ## Security & Configuration
 
 Do not hardcode API keys, passwords, tokens, or other credentials. Keep local configuration out of version control and provide safe examples when documenting required settings.
+
+## Cloud Infrastructure & Terraform Guidelines
+
+- **Infrastructure as Code (IaC) Mandate**: Any new or modified cloud infrastructure in AWS must be declared in Terraform under `infra/terraform/`. Do not perform out-of-band manual cloud modifications in AWS Console or CLI without capturing them in Terraform to prevent drift.
+- **Zero or Ultra-Low Cost Principle ($0.00 / mo)**:
+  - All provisioned infrastructure must strictly maximize the AWS Free Tier and pay-per-request serverless tiers with a target operating cost of $0.00/month for prototype and development traffic.
+  - Avoid fixed hourly or monthly charges:
+    - Use AWS Systems Manager (SSM) Parameter Store standard `SecureString` parameters ($0.00) instead of AWS Secrets Manager ($0.40/month per secret).
+    - Use AWS Lambda (1M free requests/month and 3.2M seconds compute) without provisioned concurrency instead of always-on EC2 or container instances.
+    - Use API Gateway HTTP API v2 (1M free requests/month) instead of Application Load Balancers ($16+/month) or NAT Gateways ($32+/month).
+    - Set explicit short log retention (7 days) on CloudWatch log groups to prevent unbounded storage charges.
+- **API Gateway & Cognito JWT Authorizer Configuration**:
+  - When configuring `aws_apigatewayv2_route` with a Cognito JWT Authorizer for routes consumed with Cognito Access Tokens (e.g., `USER_PASSWORD_AUTH` or `aws.cognito.signin.user.admin`), do NOT configure `authorization_scopes = ["openid"]`.
+  - **Rationale**: Cognito Access Tokens contain scopes like `aws.cognito.signin.user.admin` and do not include the `openid` scope (which is reserved for IdTokens). Specifying `authorization_scopes = ["openid"]` causes API Gateway to reject valid Cognito Access Tokens with `401 Unauthorized`. Keep `authorization_scopes` unset for access-token protected API routes.
