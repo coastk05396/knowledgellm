@@ -31,6 +31,9 @@ locals {
   qdrant_api_key_arn = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
   groq_api_key_arn   = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
   common_environment = {
+    FASTEMBED_CACHE_PATH              = "/tmp/fastembed"
+    HF_HOME                          = "/tmp/huggingface"
+    HF_HUB_CACHE                     = "/tmp/huggingface/hub"
     PYTHONPATH                       = "/var/task/src"
     DOCUMENTS_BUCKET                 = aws_s3_bucket.documents.id
     QDRANT_URL                       = var.qdrant_url
@@ -43,6 +46,9 @@ locals {
     GROQ_OUTPUT_RATE_PER_MILLION_USD = var.groq_output_rate_per_million_usd
   }
   ingestion_environment = {
+    FASTEMBED_CACHE_PATH      = "/tmp/fastembed"
+    HF_HOME                  = "/tmp/huggingface"
+    HF_HUB_CACHE             = "/tmp/huggingface/hub"
     PYTHONPATH                = "/var/task/src"
     DOCUMENTS_BUCKET          = aws_s3_bucket.documents.id
     QDRANT_URL                = var.qdrant_url

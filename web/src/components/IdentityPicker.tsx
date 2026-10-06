@@ -45,7 +45,7 @@ export function IdentityPicker({
               </span>
               {departments.includes(person.department) && (
                 <span className="identity-auth-subline">
-                  AWS Cognito verified
+                  AWS Cognito Verified
                 </span>
               )}
             </span>

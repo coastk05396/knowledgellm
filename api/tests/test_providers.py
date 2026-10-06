@@ -3,7 +3,33 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from knowledgellm.providers import QdrantVectorIndex, estimate_cost_usd
+from knowledgellm.providers import QdrantVectorIndex, _embedding_model, estimate_cost_usd
+
+
+@pytest.mark.parametrize("cache_path", [None, "/tmp/custom-fastembed"])
+def test_embedding_download_uses_writable_lambda_cache(monkeypatch, cache_path) -> None:
+    expected = cache_path or "/tmp/fastembed"
+    if cache_path:
+        monkeypatch.setenv("FASTEMBED_CACHE_PATH", cache_path)
+    else:
+        monkeypatch.delenv("FASTEMBED_CACHE_PATH", raising=False)
+    calls = []
+
+    def text_embedding(**kwargs):
+        assert kwargs.get("cache_dir") == expected, "model download would use a read-only default cache"
+        calls.append(kwargs)
+        return object()
+
+    fastembed = ModuleType("fastembed")
+    fastembed.TextEmbedding = text_embedding  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fastembed)
+    _embedding_model.cache_clear()
+    try:
+        first = _embedding_model("model")
+        assert _embedding_model("model") is first
+        assert len(calls) == 1
+    finally:
+        _embedding_model.cache_clear()
 
 
 def test_cost_requires_both_current_rates_and_reports_an_estimate() -> None:

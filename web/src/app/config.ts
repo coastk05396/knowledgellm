@@ -1,3 +1,5 @@
+import { DEFAULT_API_URL } from "./apiEndpoint";
+
 export interface AppConfig {
   apiUrl: string;
   cognitoDomain: string;
@@ -9,9 +11,7 @@ const env = (
   import.meta as ImportMeta & { env: Record<string, string | undefined> }
 ).env;
 export const appConfig: AppConfig = {
-  apiUrl:
-    env.VITE_API_URL ||
-    "https://wn85mhcff0.execute-api.ap-southeast-1.amazonaws.com",
+  apiUrl: env.DEV ? "/api" : env.VITE_API_URL || DEFAULT_API_URL,
   cognitoDomain: (
     env.VITE_COGNITO_DOMAIN ||
     "https://rick-knowledgellm-demo.auth.ap-southeast-1.amazoncognito.com"
@@ -19,8 +19,7 @@ export const appConfig: AppConfig = {
   cognitoIssuer:
     env.VITE_COGNITO_ISSUER ||
     "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_5aSsCjK0K",
-  cognitoClientId:
-    env.VITE_COGNITO_CLIENT_ID || "25kol0lmnr3kdk71tt60qrjv0u",
+  cognitoClientId: env.VITE_COGNITO_CLIENT_ID || "25kol0lmnr3kdk71tt60qrjv0u",
   redirectUri:
     env.VITE_REDIRECT_URI ||
     (typeof window !== "undefined"

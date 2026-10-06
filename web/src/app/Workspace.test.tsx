@@ -1,10 +1,74 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Workspace } from "./App";
+import type { DocumentSummary } from "./api";
 
 const session = { accessToken: "access", name: "Alex Morgan" };
 afterEach(() => vi.unstubAllGlobals());
 describe("Authorized knowledge workspace", () => {
+  it.each([
+    ["finance", "Alex", "Finance"],
+    ["operations", "Sam", "Operations"],
+    ["people", "Priya", "People"],
+  ] as const)(
+    "verifies %s only after the API confirms access and unlocks that folder",
+    async (department, name, label) => {
+      let resolveDocuments!: (docs: DocumentSummary[]) => void;
+      const documents = new Promise<DocumentSummary[]>((resolve) => {
+        resolveDocuments = resolve;
+      });
+      const { container } = render(
+        <Workspace
+          session={{ accessToken: "access", name }}
+          onSwitch={async () => {}}
+          api={{
+            loadDocuments: () => documents,
+            askQuestion: async () => ({ answer: "", citations: [] }),
+            openDocument: async () => "https://docs.example.com/source.md",
+          }}
+        />,
+      );
+      expect(
+        screen.queryByText("AWS Cognito Verified"),
+      ).not.toBeInTheDocument();
+      expect(
+        container.querySelectorAll(".folders .lucide-lock-keyhole"),
+      ).toHaveLength(3);
+
+      resolveDocuments([
+        { id: "source", title: "Permitted source", department },
+      ]);
+      expect(
+        await screen.findByRole("button", { name: "Permitted source" }),
+      ).toBeVisible();
+      const identity = screen.getByRole("button", {
+        name: `Sign in as another account: ${name}, ${label}`,
+      });
+      expect(within(identity).getByText("AWS Cognito Verified")).toBeVisible();
+      expect(screen.getAllByText("AWS Cognito Verified")).toHaveLength(1);
+      const folder = screen.getByRole("button", { name: `${label} / ${name}` });
+      expect(folder).toBeEnabled();
+      expect(folder).toHaveAttribute("aria-expanded", "true");
+      expect(folder.querySelector(".lucide-lock-keyhole")).toBeNull();
+      expect(
+        container.querySelectorAll(".folders .lucide-lock-keyhole"),
+      ).toHaveLength(2);
+
+      fireEvent.click(identity);
+      expect(
+        screen.queryByText("AWS Cognito Verified"),
+      ).not.toBeInTheDocument();
+      expect(
+        container.querySelectorAll(".folders .lucide-lock-keyhole"),
+      ).toHaveLength(3);
+    },
+  );
   it("keeps the mobile identity and status copy aligned with the reference", async () => {
     render(
       <Workspace
@@ -136,6 +200,7 @@ describe("Authorized knowledge workspace", () => {
     expect(
       screen.getByRole("textbox", { name: "Your question" }),
     ).toBeDisabled();
+    expect(screen.queryByText("AWS Cognito Verified")).not.toBeInTheDocument();
   });
 });
 

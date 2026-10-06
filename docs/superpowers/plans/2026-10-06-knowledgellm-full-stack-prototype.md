@@ -190,3 +190,19 @@ These results were recorded during the initial prototype implementation on 2026-
 - `template.yaml`: `cfn-lint`, `sam validate --lint`, and `sam build` pass. Each function build directory is 230,640,497 bytes, under Lambda's 262,144,000-byte uncompressed package limit with roughly 31 MB of headroom.
 - Post-review fixes add Cognito managed-login branding, require access tokens with the `openid` scope, index Qdrant filter fields before access, preserve the chat when citations open in a new tab, and prevent IME Enter from submitting unfinished text.
 - Cloud deployment and live Cognito verification were not run.
+
+
+## Follow-up: verified identity, folder access, and writable embedding caches
+
+- [x] Reproduce successful login with blocked document requests at `127.0.0.1:5173`; confirm the API allows `localhost:5173` instead.
+- [x] Proxy local development API requests through Vite, preserving bearer-token authorization and production CORS behavior.
+- [x] Show the exact green `AWS Cognito Verified` label beneath the authorized identity; keep the other two folders locked, remove the selected folder lock, and expand its files.
+- [x] Clear the previous session at switch start; stop claiming a folder is unlocked before document access succeeds.
+- [x] Keep mobile verification text inside its card with horizontally scrollable identity controls.
+- [x] Pass an explicit `/tmp` FastEmbed cache directory in the shared chat/ingestion factory and declare FastEmbed/Hugging Face cache paths in both Terraform Lambda environments.
+- [x] Verify frontend tests (25 passed), production build, changed-file formatting, and Terraform validation. The affected provider/ingestion/chat/handler tests pass (26 tests), including cache regressions that failed before the fix.
+- [x] Exercise real Cognito logins for Alex, Sam, and Priya at both local origins. Each sees two documents only from its department. A simulated rejected document request leaves every folder locked and no verified identity badge.
+- [x] Capture [desktop](../../design/verification/2026-10-06-cognito-verified-desktop.png) and [mobile](../../design/verification/2026-10-06-cognito-verified-mobile.png) previews. Browser review was performed by the implementer; no independent review was run.
+- [ ] Rebuild and deploy the reviewed Lambda package and Terraform cache settings; re-upload an approved fictional document and confirm ingestion writes vectors to Qdrant without read-only filesystem errors.
+
+Existing checks needing follow-up: the full backend suite reports 41 passed and 2 failures in unchanged department-claim and sample-content tests. Repository-wide Prettier reports unchanged `App.test.tsx`, `auth.ts`, and `Toast.test.tsx`; formatting passes for this change's frontend files. These issues also exist on the starting `origin/main` revision. The cache fix has not been deployed to AWS or verified with a real model download in Lambda.

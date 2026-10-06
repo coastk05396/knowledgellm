@@ -47,6 +47,8 @@ Pages serves static assets without a Docker container. Keep provider keys in the
 
 ## Local development
 
+Vite sends development API requests through its same-origin `/api` proxy, forwarding the bearer token to `VITE_API_URL` (or the configured demo API). This lets both `localhost` and `127.0.0.1` previews load permitted documents without changing AWS CORS. Production builds call the configured API directly and still require the deployed frontend origin in API Gateway CORS.
+
 Requirements: Node.js 20.19+ or 22.12+, npm, Python 3.12, and Git. Install the web app and run the local checks:
 
 ```sh
@@ -71,6 +73,8 @@ python -m pytest
 The frontend starts without credentials but disables sign-in. Copy `web/.env.example` to `web/.env.local` and set `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI` from the deployed stack outputs. Cognito managed login receives the username and password; the app never handles or stores the password. Account switching signs out, clears the current workspace, and requires a fresh login.
 
 ## AWS prototype setup with Terraform
+
+Both Lambda functions configure `FASTEMBED_CACHE_PATH=/tmp/fastembed`, `HF_HOME=/tmp/huggingface`, and `HF_HUB_CACHE=/tmp/huggingface/hub`. FastEmbed also receives an explicit writable cache directory in code. This avoids model downloads writing to Lambda's read-only filesystem; caches are temporary per execution environment. Rebuild the Lambda package and apply the reviewed Terraform change before checking ingestion again. See [AWS ephemeral storage documentation](https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html).
 
 ☁️ Terraform in `infra/terraform/` creates Cognito managed login, the three department groups, private encrypted/versioned document storage, a JWT-protected HTTP API, Lambda functions, and S3-triggered ingestion. The web client uses authorization code with PKCE and has no client secret. Protected API routes require the `openid` scope and accept Cognito access tokens only. Self-registration is disabled; create users administratively and add each user to exactly one of `finance`, `operations`, or `people`.
 

@@ -122,6 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
   const loginAsPersona = async (department: string) => {
+    setSession(null);
+    setToast(null);
     setLoading(true);
     setError(null);
     try {
@@ -129,14 +131,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       const persona = identities.find((p) => p.department === department);
       const shortName = persona ? persona.name : newSession.name.split(" ")[0];
-      const deptLabel = persona ? persona.label : department;
       setToast({
         message: `${shortName} signed in successfully`,
-        subtitle: `${deptLabel} folder unlocked`,
+        subtitle: "AWS Cognito Verified",
         department: department as Department,
       });
-    } catch (err) {
-      console.error("loginAsPersona failed:", err);
+    } catch {
       setError("Could not sign in with this persona. Please try again.");
     } finally {
       setLoading(false);
