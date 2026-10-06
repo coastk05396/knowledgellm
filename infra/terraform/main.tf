@@ -31,7 +31,7 @@ locals {
   qdrant_api_key_arn = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
   groq_api_key_arn   = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
   common_environment = {
-    FASTEMBED_CACHE_PATH              = "/tmp/fastembed"
+    FASTEMBED_CACHE_PATH             = "/tmp/fastembed"
     HF_HOME                          = "/tmp/huggingface"
     HF_HUB_CACHE                     = "/tmp/huggingface/hub"
     PYTHONPATH                       = "/var/task/src"
@@ -47,8 +47,8 @@ locals {
   }
   ingestion_environment = {
     FASTEMBED_CACHE_PATH      = "/tmp/fastembed"
-    HF_HOME                  = "/tmp/huggingface"
-    HF_HUB_CACHE             = "/tmp/huggingface/hub"
+    HF_HOME                   = "/tmp/huggingface"
+    HF_HUB_CACHE              = "/tmp/huggingface/hub"
     PYTHONPATH                = "/var/task/src"
     DOCUMENTS_BUCKET          = aws_s3_bucket.documents.id
     QDRANT_URL                = var.qdrant_url
@@ -67,11 +67,17 @@ locals {
   lambda_names = {
     knowledge = "${var.project_name}-knowledge"
     ingestion = "${var.project_name}-ingestion"
+    demo_auth = "${var.project_name}-demo-auth"
   }
 }
 
 resource "aws_cognito_user_pool" "users" {
   name = "${var.project_name}-users"
+  lambda_config {
+    define_auth_challenge          = aws_lambda_function.demo_auth.arn
+    create_auth_challenge          = aws_lambda_function.demo_auth.arn
+    verify_auth_challenge_response = aws_lambda_function.demo_auth.arn
+  }
   username_configuration {
     case_sensitive = false
   }
@@ -100,7 +106,7 @@ resource "aws_cognito_user_pool_client" "web" {
   generate_secret                      = false
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
-  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH"]
+  explicit_auth_flows                  = ["ALLOW_CUSTOM_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "profile", "email"]
@@ -369,4 +375,50 @@ resource "aws_lambda_permission" "eventbridge" {
   function_name = aws_lambda_function.ingestion.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.document_created.arn
+}
+
+resource "aws_iam_role" "demo_auth" {
+  name               = local.lambda_names.demo_auth
+  assume_role_policy = local.lambda_trust_policy
+}
+
+resource "aws_iam_role_policy" "demo_auth" {
+  name = "${var.project_name}-demo-auth-logs"
+  role = aws_iam_role.demo_auth.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.lambda["demo_auth"].arn}:*"
+    }]
+  })
+}
+
+resource "aws_lambda_function" "demo_auth" {
+  function_name    = local.lambda_names.demo_auth
+  role             = aws_iam_role.demo_auth.arn
+  filename         = abspath("${path.module}/${var.auth_lambda_package_path}")
+  source_code_hash = filebase64sha256(abspath("${path.module}/${var.auth_lambda_package_path}"))
+  handler          = "auth_challenge.handler"
+  runtime          = "python3.12"
+  timeout          = 3
+  memory_size      = 128
+  depends_on       = [aws_iam_role_policy.demo_auth]
+  environment { variables = { DEMO_MODE = tostring(var.demo_mode) } }
+  logging_config {
+    log_format            = "JSON"
+    application_log_level = "INFO"
+    system_log_level      = "WARN"
+    log_group             = aws_cloudwatch_log_group.lambda["demo_auth"].name
+  }
+}
+
+resource "aws_lambda_permission" "cognito_demo_auth" {
+  statement_id   = "AllowCognitoCustomChallenges"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.demo_auth.function_name
+  principal      = "cognito-idp.amazonaws.com"
+  source_arn     = aws_cognito_user_pool.users.arn
+  source_account = data.aws_caller_identity.current.account_id
 }

@@ -83,3 +83,15 @@ variable "lambda_package_path" {
   type        = string
   default     = "../../build/knowledgellm-lambda.zip"
 }
+
+variable "demo_mode" {
+  description = "Allow public password-free access to fictional personas through Cognito custom challenges."
+  type        = bool
+  default     = false
+}
+
+variable "auth_lambda_package_path" {
+  description = "Small standalone Cognito challenge Lambda zip built by scripts/package-lambdas.sh."
+  type        = string
+  default     = "../../build/demo-auth.zip"
+}

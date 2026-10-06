@@ -1,5 +1,7 @@
 # Northstar Operations — Incident Management Runbook
 
+> Fictional sample for public demonstration; not real company data or policy.
+
 ## 1. Purpose & Incident Classifications
 This runbook defines standard operating procedures for investigating, containing, and resolving service disruptions across Northstar platforms.
 

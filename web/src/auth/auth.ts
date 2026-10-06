@@ -37,50 +37,70 @@ export function logoutUrl(config: AppConfig): string {
 export const userManager = authConfigured
   ? new UserManager(createAuthSettings(appConfig))
   : null;
-export const DEMO_ACCOUNTS: Record<string, { username: string; name: string; password: string }> = {
-  finance: { username: "alex", name: "Alex Morgan", password: "Demo123456!@#" },
-  operations: { username: "sam", name: "Sam Patel", password: "Demo123456!@#" },
-  people: { username: "priya", name: "Priya Ray", password: "Demo123456!@#" },
+const DEMO_PERSONAS: Record<string, { username: string; name: string }> = {
+  finance: { username: "alex", name: "Alex Morgan" },
+  operations: { username: "sam", name: "Sam Patel" },
+  people: { username: "priya", name: "Priya Ray" },
 };
 
-export async function signInAsPersona(department: string): Promise<Session> {
-  const account = DEMO_ACCOUNTS[department];
-  if (!account) throw new Error(`Unknown persona department: ${department}`);
+interface CognitoAuthResponse {
+  ChallengeName?: string;
+  Session?: string;
+  AuthenticationResult?: { AccessToken?: string; ExpiresIn?: number };
+}
 
-  // Call Cognito directly with USER_PASSWORD_AUTH using the cognito-idp endpoint
-  const regionMatch = appConfig.cognitoIssuer.match(/cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/);
-  const region = regionMatch ? regionMatch[1] : "ap-southeast-1";
-  const cognitoEndpoint = `https://cognito-idp.${region}.amazonaws.com/`;
-
-  const res = await fetch(cognitoEndpoint, {
+async function cognitoAuth(
+  action: "InitiateAuth" | "RespondToAuthChallenge",
+  payload: Record<string, unknown>,
+): Promise<CognitoAuthResponse> {
+  const region = appConfig.cognitoIssuer.match(
+    /^https:\/\/cognito-idp\.([a-z0-9-]+)\.amazonaws\.com\//,
+  )?.[1];
+  if (!region) throw new Error("Invalid Cognito configuration.");
+  const response = await fetch(`https://cognito-idp.${region}.amazonaws.com/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-amz-json-1.1",
-      "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+      "X-Amz-Target": `AWSCognitoIdentityProviderService.${action}`,
     },
-    body: JSON.stringify({
-      AuthFlow: "USER_PASSWORD_AUTH",
-      ClientId: appConfig.cognitoClientId,
-      AuthParameters: {
-        USERNAME: account.username,
-        PASSWORD: account.password,
-      },
-    }),
+    body: JSON.stringify(payload),
   });
+  if (!response.ok) throw new Error("Demo sign-in is unavailable.");
+  const data: unknown = await response.json();
+  if (typeof data !== "object" || data === null)
+    throw new Error("Invalid Cognito response.");
+  return data as CognitoAuthResponse;
+}
 
-  if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`Cognito authentication failed: ${errorBody}`);
+export async function signInAsPersona(department: string): Promise<Session> {
+  sessionStorage.removeItem("knowledge-direct-session");
+  const persona = Object.hasOwn(DEMO_PERSONAS, department)
+    ? DEMO_PERSONAS[department]
+    : undefined;
+  if (!persona) throw new Error("Unknown demo persona.");
+  const challenge = await cognitoAuth("InitiateAuth", {
+    AuthFlow: "CUSTOM_AUTH",
+    ClientId: appConfig.cognitoClientId,
+    AuthParameters: { USERNAME: persona.username },
+  });
+  if (
+    challenge.ChallengeName !== "CUSTOM_CHALLENGE" ||
+    typeof challenge.Session !== "string" ||
+    !challenge.Session
+  ) {
+    throw new Error("Invalid Cognito challenge.");
   }
-
-  const data = await res.json();
-  const token = data.AuthenticationResult?.AccessToken;
-  if (!token) throw new Error("No access token returned from Cognito");
-
-  const session: Session = {
-    accessToken: token,
-    name: account.name,
-  };
+  const result = await cognitoAuth("RespondToAuthChallenge", {
+    ChallengeName: "CUSTOM_CHALLENGE",
+    ClientId: appConfig.cognitoClientId,
+    Session: challenge.Session,
+    // Public demo acknowledgement, not a password or proof of identity.
+    ChallengeResponses: { USERNAME: persona.username, ANSWER: "demo" },
+  });
+  const token = result.AuthenticationResult?.AccessToken;
+  if (typeof token !== "string" || !token)
+    throw new Error("No access token returned from Cognito.");
+  const session: Session = { accessToken: token, name: persona.name };
   sessionStorage.setItem("knowledge-direct-session", JSON.stringify(session));
   return session;
 }
@@ -99,4 +119,3 @@ export async function switchIdentity(
   sessionStorage.setItem("knowledge-account-switch", "1");
   redirect(logoutUrl(appConfig));
 }
-

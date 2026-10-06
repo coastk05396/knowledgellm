@@ -1,5 +1,7 @@
 # Northstar People — Employee Handbook & Workplace Culture
 
+> Fictional sample for public demonstration; not real company data or policy.
+
 ## 1. Welcome & Company Culture
 Welcome to Northstar! We believe in fostering an inclusive, high-trust environment where distributed collaboration and creative problem-solving thrive.
 

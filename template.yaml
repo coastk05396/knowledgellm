@@ -3,6 +3,11 @@ Transform: AWS::Serverless-2016-10-31
 Description: KnowledgeLLM permission-aware knowledge assistant prototype
 
 Parameters:
+  DemoMode:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Public fictional demo access only; custom authentication is denied otherwise
   CognitoDomainPrefix:
     Type: String
     MinLength: 1
@@ -65,6 +70,10 @@ Resources:
   CognitoUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
+      LambdaConfig:
+        DefineAuthChallenge: !GetAtt DemoAuthFunction.Arn
+        CreateAuthChallenge: !GetAtt DemoAuthFunction.Arn
+        VerifyAuthChallengeResponse: !GetAtt DemoAuthFunction.Arn
       UserPoolName: !Sub '${AWS::StackName}-users'
       UsernameConfiguration:
         CaseSensitive: false
@@ -78,6 +87,39 @@ Resources:
           RequireSymbols: true
           RequireUppercase: true
           TemporaryPasswordValidityDays: 7
+
+  DemoAuthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-demo-auth'
+      RetentionInDays: 7
+
+  DemoAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-demo-auth'
+      CodeUri: api/src/knowledgellm/
+      Handler: auth_challenge.handler
+      Runtime: python3.12
+      Timeout: 3
+      MemorySize: 128
+      Environment:
+        Variables:
+          DEMO_MODE: !Ref DemoMode
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
+        LogGroup: !Ref DemoAuthLogGroup
+
+  CognitoDemoAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt DemoAuthFunction.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt CognitoUserPool.Arn
+      SourceAccount: !Ref AWS::AccountId
 
   FinanceGroup:
     Type: AWS::Cognito::UserPoolGroup
@@ -106,7 +148,7 @@ Resources:
       PreventUserExistenceErrors: ENABLED
       EnableTokenRevocation: true
       ExplicitAuthFlows:
-        - ALLOW_USER_SRP_AUTH
+        - ALLOW_CUSTOM_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows:
@@ -207,8 +249,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoJwt
-              AuthorizationScopes:
-                - openid
         OpenDocument:
           Type: HttpApi
           Properties:
@@ -217,8 +257,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoJwt
-              AuthorizationScopes:
-                - openid
         AskQuestion:
           Type: HttpApi
           Properties:
@@ -227,8 +265,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoJwt
-              AuthorizationScopes:
-                - openid
 
   IngestionFunction:
     Type: AWS::Serverless::Function

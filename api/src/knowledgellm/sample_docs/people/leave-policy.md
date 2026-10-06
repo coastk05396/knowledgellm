@@ -1,5 +1,7 @@
 # Northstar People — Time Off & Leave Policy
 
+> Fictional sample for public demonstration; not real company data or policy.
+
 ## 1. Overview
 Northstar values rest and work-life balance. We provide comprehensive paid leave options to support personal wellness, family commitments, and unexpected emergencies.
 
