@@ -200,8 +200,8 @@ resource "aws_iam_role_policy" "knowledge" {
         Resource = "${aws_s3_bucket.documents.arn}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "secretsmanager:GetSecretValue",
           "ssm:GetParameter"
         ]
@@ -228,8 +228,8 @@ resource "aws_iam_role_policy" "ingestion" {
         Resource = "${aws_s3_bucket.documents.arn}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "secretsmanager:GetSecretValue",
           "ssm:GetParameter"
         ]
