@@ -18,6 +18,8 @@ The product has three initial departments and representative identities matching
 
 ### UI contract from the supplied references
 
+- **Verified identity and folder state:** After Cognito sign-in and a successful authorized document listing, show a small green `AWS Cognito Verified` line beneath the active identity. Its department folder displays a document count and expands without a lock icon; other department folders remain locked. Clear these states immediately when switching begins. A failed document request must not display verified folder access.
+
 - **Desktop:** top brand bar with identity/account controls; a left department sidebar with a monitor panel anchored low; a main conversation area with a section header, identity introduction, flat user/assistant messages, citation chips, and a bottom composer with an access caption.
 - **Mobile:** compact brand header; three identity cards; department accordions; conversation; a two-column guardrail/cost panel; and the composer with safe-area spacing. Stack the monitor at narrow widths and allow identity cards to scroll horizontally rather than compressing their labels.
 - **Palette:** graphite canvas `#202326`, surfaces `#25292D` and `#292E35`, slate borders `#48535F`, primary text `#EDF0F3`, muted text `#ADB8C6`, Finance coral `#ED9678`, Operations cyan `#62B7C3`, People violet `#B79BDE`, gold `#E3BE73`, and success green `#39BD7B`. Treat these as visual-reference estimates.
@@ -47,6 +49,8 @@ The product has three initial departments and representative identities matching
 - Uploading or indexing confidential company data. Initial acceptance uses synthetic/sample documents until external-model data handling is reviewed.
 
 ## Architecture
+
+- **Embedding cache:** Chat and ingestion share the FastEmbed factory and store model/download caches under Lambda's writable `/tmp` directory, with the paths declared in Terraform.
 
 - **Web:** React, Vite, and TypeScript, hosted as static assets on Cloudflare Pages for the public demo. The browser uses Cognito managed login with OAuth authorization-code flow and PKCE. Cognito presents the username/password form; the app never handles or stores passwords. Account switching clears the local app session and requires re-authentication with `prompt=login`.
 - **API:** Python 3.12 AWS Lambda behind API Gateway HTTP API. The API verifies the Cognito access token and derives user identity/groups only from verified claims. Request bodies never select or override a role.

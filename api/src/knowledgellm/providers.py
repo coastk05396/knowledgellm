@@ -18,7 +18,10 @@ COLLECTION = os.getenv("QDRANT_COLLECTION", "knowledgellm")
 def _embedding_model(model_name: str) -> Any:
     from fastembed import TextEmbedding
 
-    return TextEmbedding(model_name=model_name)
+    return TextEmbedding(
+        model_name=model_name,
+        cache_dir=os.getenv("FASTEMBED_CACHE_PATH") or "/tmp/fastembed",
+    )
 
 
 class FastEmbedder(Embedder):

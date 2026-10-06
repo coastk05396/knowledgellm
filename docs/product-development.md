@@ -17,6 +17,10 @@ Edit the product spec when you want to change what KnowledgeLLM should do. Keep 
 - Cloudflare deployment documentation and this reorganization are in [PR #2](https://github.com/coastk05396/knowledgellm/pull/2), which depends on PR #1.
 - Public AWS/Cloudflare deployment and live Cognito verification remain pending. Past local checks are recorded in the plan, not evidence of a deployed system.
 
+## Current follow-up
+
+Verified identity/folder behavior and writable FastEmbed caches are submitted in [PR #5](https://github.com/coastk05396/knowledgellm/pull/5). The cache fix is deployed through Terraform; ingestion indexed 12 sample chunks and live Finance chat/PII checks passed. See the plan’s final follow-up sections for evidence and remaining acceptance checks.
+
 ## Next action
 
 Review the open PRs, then follow the plan's **Deployment and demo checklist** using README's setup instructions. The target account, region, custom domain, provider credentials, and live service costs still need configuration or confirmation before deployment.
