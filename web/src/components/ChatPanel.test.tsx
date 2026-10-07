@@ -5,6 +5,7 @@ import { ChatPanel } from "./ChatPanel";
 describe("ChatPanel pending status", () => {
   it("announces a stable status while pending and clears it when finished", () => {
     const props = {
+      documents: [],
       name: "Sam",
       departments: ["operations" as const],
       messages: [],

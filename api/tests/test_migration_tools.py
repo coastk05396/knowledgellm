@@ -35,7 +35,7 @@ def test_repeat_rejects_nonzero_or_missing_generation_usage(evaluation_tool, usa
         )
 
 
-def test_index_migration_dry_run_uses_six_canonical_pdfs(monkeypatch, capsys):
+def test_index_migration_dry_run_uses_twelve_markdown_sources(monkeypatch, capsys):
     import json
     import sys
     path = Path(__file__).resolve().parents[2] / "scripts/migrate-cohere-index.py"
@@ -44,4 +44,4 @@ def test_index_migration_dry_run_uses_six_canonical_pdfs(monkeypatch, capsys):
     spec.loader.exec_module(module)
     monkeypatch.setattr(sys, "argv", [str(path), "--bucket", "existing-bucket", "--function", "staged-ingester"])
     module.main()
-    assert json.loads(capsys.readouterr().out) == {"mode": "dry_run", "documents": 6, "collection": "knowledgellm-cohere-v3"}
+    assert json.loads(capsys.readouterr().out) == {"mode": "dry_run", "documents": 12, "collection": "knowledgellm-cohere-v3"}

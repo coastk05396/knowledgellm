@@ -37,17 +37,17 @@ def test_ingestion_derives_department_and_source_from_trusted_key() -> None:
     index = FakeIndex()
 
     count = ingest_s3_object(
-        {"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.pdf"}}}]},
+        {"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.md"}}}]},
         storage,
         index,
         FakeEmbedder(),
     )
 
     assert count == 1
-    assert storage.calls == ["finance/q4-budget-overview.pdf"]
+    assert storage.calls == ["finance/q4-budget-overview.md"]
     assert index.records[0]["department"] == "finance"
     assert index.records[0]["document_id"] == "finance-q4-budget-overview"
-    assert index.records[0]["source_key"] == "finance/q4-budget-overview.pdf"
+    assert index.records[0]["source_key"] == "finance/q4-budget-overview.md"
     assert index.replaced_documents == ["finance-q4-budget-overview"]
 
 
@@ -56,7 +56,7 @@ def test_ingestion_rejects_unknown_key_before_reading_source() -> None:
 
     with pytest.raises(ValueError):
         ingest_s3_object(
-            {"Records": [{"s3": {"object": {"key": "people/other-file.pdf"}}}]},
+            {"Records": [{"s3": {"object": {"key": "people/other-file.md"}}}]},
             storage,
             FakeIndex(),
             FakeEmbedder(),
@@ -69,7 +69,7 @@ def test_empty_document_creates_no_vectors() -> None:
     index = FakeIndex()
 
     count = ingest_s3_object(
-        {"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.pdf"}}}]},
+        {"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.md"}}}]},
         FakeStorage("  \n "),
         index,
         FakeEmbedder(),
@@ -96,14 +96,14 @@ def test_eventbridge_s3_event_is_normalized_to_an_object_record() -> None:
             "detail-type": "Object Created",
             "detail": {
                 "bucket": {"name": "knowledge-private"},
-                "object": {"key": "finance/budget final.pdf"},
+                "object": {"key": "finance/budget final.md"},
             },
         }
     ) == [
         {
             "s3": {
                 "bucket": {"name": "knowledge-private"},
-                "object": {"key": "finance/budget%20final.pdf"},
+                "object": {"key": "finance/budget%20final.md"},
             }
         }
     ]
@@ -128,7 +128,7 @@ def test_versioned_ingestion_reads_immutable_source_and_never_replaces() -> None
 
     versions = Versions()
     count = ingest_s3_object(
-        {"Records": [{"s3": {"object": {"key": "finance/expense-policy.pdf", "versionId": "older-event-version"}}}]},
+        {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": "older-event-version"}}}]},
         Storage(), Index(), FakeEmbedder(), versions=versions,
     )
     assert count > 1
@@ -150,7 +150,7 @@ def test_failed_version_index_never_publishes_completion() -> None:
 
     with pytest.raises(RuntimeError, match="vector service"):
         ingest_s3_object(
-            {"Records": [{"s3": {"object": {"key": "finance/expense-policy.pdf", "versionId": "v1"}}}]},
+            {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": "v1"}}}]},
             Storage(), Index(), FakeEmbedder(), versions=Versions(),
         )
 
@@ -168,7 +168,7 @@ def test_version_specific_point_ids_are_stable_and_cannot_overwrite_newer_versio
     index = Index()
     for version in ("new", "old", "new"):
         ingest_s3_object(
-            {"Records": [{"s3": {"object": {"key": "finance/expense-policy.pdf", "versionId": version}}}]},
+            {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": version}}}]},
             Storage(), index, FakeEmbedder(),
         )
     assert index.ids[0] == index.ids[2]
@@ -178,15 +178,35 @@ def test_version_specific_point_ids_are_stable_and_cannot_overwrite_newer_versio
 def test_eventbridge_preserves_immutable_version_id() -> None:
     record = normalize_s3_event({
         "source": "aws.s3", "detail-type": "Object Created",
-        "detail": {"bucket": {"name": "bucket"}, "object": {"key": "finance/expense-policy.pdf", "version-id": "version1"}},
+        "detail": {"bucket": {"name": "bucket"}, "object": {"key": "finance/expense-policy.md", "version-id": "version1"}},
     })[0]
     assert record["s3"]["object"]["versionId"] == "version1"
 
 
-def test_legacy_markdown_event_cannot_overwrite_pdf_index() -> None:
+def test_pdf_event_is_rejected_before_storage() -> None:
     storage = FakeStorage("old source")
     index = FakeIndex()
     with pytest.raises(ValueError, match="approved catalog"):
-        ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.md"}}}]}, storage, index, FakeEmbedder())
+        ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.pdf"}}}]}, storage, index, FakeEmbedder())
     assert storage.calls == []
     assert index.replaced_documents == []
+
+
+def test_chinese_ingestion_uses_base_document_id_and_independent_version():
+    class Storage:
+        def read_document(self, key, version_id=None):
+            assert key == "finance/expense-policy-ch.md"
+            assert version_id == "zh-version"
+            return "費用報告須於 14 個日曆日內提交。"
+    class Index:
+        records = []
+        def upsert_version(self, document_id, records):
+            assert document_id == "finance-expense-policy"
+            self.records = records
+    index = Index()
+    count = ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/expense-policy-ch.md", "versionId": "zh-version"}}}]}, Storage(), index, FakeEmbedder())
+    assert count == 1
+    assert index.records[0]["source_version_id"] == "zh-version"
+    assert index.records[0]["source_key"] == "finance/expense-policy-ch.md"
+    assert index.records[0]["title"] == "費用報銷政策"
+    assert index.records[0]["department"] == "finance"

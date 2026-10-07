@@ -79,8 +79,15 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         return _response(401, {"error": "unauthenticated"})
 
     departments = departments_for_claims(claims)
+    document_language: Language = "en"
+    if method == "GET" and isinstance(path, str) and (path == "/documents" or path.startswith("/documents/")):
+        query = event.get("queryStringParameters")
+        requested_language = query.get("language", "en") if isinstance(query, dict) else "en"
+        if requested_language not in ("en", "zh-TW"):
+            return _response(400, {"error": "invalid_language"})
+        document_language = "zh-TW" if requested_language == "zh-TW" else "en"
     if path == "/documents" and method == "GET":
-        return _response(200, {"documents": [summary_dict(doc) for doc in list_documents(departments)]})
+        return _response(200, {"documents": [summary_dict(doc) for doc in list_documents(departments, document_language)]})
 
     if isinstance(path, str) and path.startswith("/documents/") and method == "GET":
         path_parameters = event.get("pathParameters")
@@ -91,7 +98,7 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         if not bucket:
             return _response(503, {"error": "storage_unavailable"})
         try:
-            link = open_document(document_id, departments, S3DocumentStorage(bucket))
+            link = open_document(document_id, departments, S3DocumentStorage(bucket), document_language)
         except AuthorizationError:
             return _response(404, {"error": "not_found"})
         except Exception:

@@ -129,7 +129,7 @@ def answer_question(
     valid_ids = {chunk.document_id for chunk in chunks}
     citations: list[Citation] = []
     for document_id in dict.fromkeys(cited_ids):
-        document = document_for_id(document_id)
+        document = document_for_id(document_id, language)
         if document_id in valid_ids and document is not None:
             citations.append(Citation(document_id=document_id, title=document.title))
     if not citations:

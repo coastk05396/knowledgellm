@@ -30,13 +30,13 @@ export interface ChatAnswer {
   cache_status?: "hit" | "miss" | "bypass";
 }
 export interface KnowledgeApi {
-  loadDocuments(token: string): Promise<DocumentSummary[]>;
+  loadDocuments(token: string, language?: Language): Promise<DocumentSummary[]>;
   askQuestion(
     token: string,
     question: string,
     language?: Language,
   ): Promise<ChatAnswer>;
-  openDocument(token: string, id: string): Promise<string>;
+  openDocument(token: string, id: string, language?: Language): Promise<string>;
 }
 async function request(
   path: string,
@@ -62,8 +62,8 @@ async function request(
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object");
 export const knowledgeApi: KnowledgeApi = {
-  async loadDocuments(token) {
-    const data = await request("/documents", token);
+  async loadDocuments(token, language = "en") {
+    const data = await request(`/documents?language=${language}`, token);
     if (!isRecord(data) || !Array.isArray(data.documents))
       throw new Error("Invalid documents");
     return data.documents.map((doc: unknown) => {
@@ -115,8 +115,11 @@ export const knowledgeApi: KnowledgeApi = {
         : {}),
     };
   },
-  async openDocument(token, id) {
-    const data = await request("/documents/" + encodeURIComponent(id), token);
+  async openDocument(token, id, language = "en") {
+    const data = await request(
+      `/documents/${encodeURIComponent(id)}?language=${language}`,
+      token,
+    );
     if (
       !isRecord(data) ||
       !isRecord(data.document) ||

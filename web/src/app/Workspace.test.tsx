@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,7 +11,10 @@ import { Workspace } from "./App";
 import type { DocumentSummary } from "./api";
 
 const session = { accessToken: "access", name: "Alex Morgan" };
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.localStorage.clear();
+});
 describe("Authorized knowledge workspace", () => {
   it.each([
     ["finance", "Alex", "Finance"],
@@ -444,7 +448,7 @@ it("switches to Traditional Chinese and sends the language without changing acce
           },
         ],
         askQuestion,
-        openDocument: async () => "https://docs.example.com/source.pdf",
+        openDocument: async () => "https://docs.example.com/source-ch.md",
       }}
     />,
   );
@@ -455,7 +459,9 @@ it("switches to Traditional Chinese and sends the language without changing acce
     "aria-pressed",
     "true",
   );
-  expect(screen.getByRole("button", { name: "第四季預算概覽" })).toBeVisible();
+  expect(
+    await screen.findByRole("button", { name: "第四季預算概覽" }),
+  ).toBeVisible();
   expect(screen.getByRole("button", { name: /營運.*受限/ })).toBeDisabled();
   fireEvent.click(
     screen.getByRole("button", { name: "第四季核准的總預算是多少？" }),
@@ -487,4 +493,155 @@ it("switches to Traditional Chinese and sends the language without changing acce
     }),
   ).toBeVisible();
   window.localStorage.clear();
+});
+
+it("reloads source language and ignores outdated lists while retaining the conversation", async () => {
+  let resolveChinese!: (docs: DocumentSummary[]) => void;
+  const chineseDocuments = new Promise<DocumentSummary[]>((resolve) => {
+    resolveChinese = resolve;
+  });
+  const api = {
+    loadDocuments: vi.fn(async (_token: string, language = "en") =>
+      language === "zh-TW"
+        ? chineseDocuments
+        : [
+            {
+              id: "finance-q4",
+              title: "Q4 budget overview",
+              department: "finance" as const,
+            },
+          ],
+    ),
+    askQuestion: async () => ({ answer: "Existing answer", citations: [] }),
+    openDocument: async () => "https://docs.example.com/source.md",
+  };
+  render(<Workspace session={session} onSwitch={async () => {}} api={api} />);
+  await screen.findByRole("button", { name: "Q4 budget overview" });
+  fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
+    target: { value: "Budget?" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+  await screen.findByText("Existing answer");
+  fireEvent.click(screen.getByRole("button", { name: "CH" }));
+  expect(screen.getByText("Existing answer")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: "您的問題" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "EN" }));
+  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await act(async () => {
+    resolveChinese([
+      { id: "stale", title: "Stale Chinese source", department: "finance" },
+    ]);
+  });
+  expect(screen.queryByText("Stale Chinese source")).not.toBeInTheDocument();
+  expect(screen.getByText("Existing answer")).toBeVisible();
+  expect(api.loadDocuments.mock.calls.map((call) => call[1])).toEqual([
+    "en",
+    "zh-TW",
+    "en",
+  ]);
+});
+
+it("closes a pending source and ignores its URL when the language changes", async () => {
+  let resolveUrl!: (url: string) => void;
+  const sourceWindow = {
+    opener: window,
+    closed: false,
+    location: { replace: vi.fn() },
+    close: vi.fn(),
+  };
+  vi.stubGlobal("open", () => sourceWindow);
+  const openDocument = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        resolveUrl = resolve;
+      }),
+  );
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => [
+          {
+            id: "finance-q4",
+            title: "Q4 budget overview",
+            department: "finance",
+          },
+        ],
+        askQuestion: async () => ({ answer: "", citations: [] }),
+        openDocument,
+      }}
+    />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Q4 budget overview" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "CH" }));
+  await screen.findByRole("button", { name: "第四季預算概覽" });
+  await act(async () => {
+    resolveUrl("https://docs.example.com/source.md");
+  });
+  expect(sourceWindow.close).toHaveBeenCalled();
+  expect(sourceWindow.location.replace).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "第四季預算概覽" }));
+  expect(openDocument).toHaveBeenLastCalledWith(
+    "access",
+    "finance-q4",
+    "zh-TW",
+  );
+});
+
+it("uses the current document locale for a Chinese answer's citation when switching to English", async () => {
+  window.localStorage.setItem("knowledge-language", "zh-TW");
+  const sourceWindow = {
+    opener: window,
+    location: { replace: vi.fn() },
+    close: vi.fn(),
+  };
+  vi.stubGlobal("open", () => sourceWindow);
+  const openDocument = vi.fn(
+    async () => "https://docs.example.com/finance/q4-budget-overview.md",
+  );
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async (_token, language) => [
+          {
+            id: "finance-q4",
+            title:
+              language === "zh-TW" ? "第四季預算概覽" : "Q4 budget overview",
+            department: "finance",
+          },
+        ],
+        askQuestion: async () => ({
+          answer: "核准預算為一百萬元。",
+          citations: [{ document_id: "finance-q4", title: "第四季預算概覽" }],
+        }),
+        openDocument,
+      }}
+    />,
+  );
+  await screen.findByRole("button", { name: "第四季預算概覽" });
+  fireEvent.change(screen.getByRole("textbox", { name: "您的問題" }), {
+    target: { value: "核准預算是多少？" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "傳送問題" }));
+  await screen.findByRole("button", { name: "來源： 第四季預算概覽" });
+  fireEvent.click(screen.getByRole("button", { name: "EN" }));
+  await screen.findByRole("button", { name: "Q4 budget overview" });
+  const citation = screen.getByRole("button", {
+    name: "Source: Q4 budget overview",
+  });
+  expect(citation).toHaveTextContent("Q4 budget overview");
+  expect(screen.getByText("核准預算為一百萬元。")).toBeVisible();
+  fireEvent.click(citation);
+  await waitFor(() =>
+    expect(sourceWindow.location.replace).toHaveBeenCalledWith(
+      "https://docs.example.com/finance/q4-budget-overview.md",
+    ),
+  );
+  expect(openDocument).toHaveBeenCalledWith("access", "finance-q4", "en");
 });

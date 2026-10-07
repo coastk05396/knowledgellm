@@ -21,9 +21,9 @@ def main() -> None:
     parser.add_argument("--execute", action="store_true", help="Permit live indexing/provider calls")
     args = parser.parse_args()
     samples = Path(__file__).resolve().parents[1] / "api/src/knowledgellm/sample_docs"
-    keys = sorted(str(path.relative_to(samples)) for path in samples.rglob("*.pdf"))
-    if len(keys) != 6:
-        raise SystemExit("Expected exactly six approved sample documents")
+    keys = sorted(str(path.relative_to(samples)) for path in samples.rglob("*.md"))
+    if len(keys) != 12:
+        raise SystemExit("Expected exactly twelve approved sample documents")
     if not args.execute:
         print(json.dumps({"mode": "dry_run", "documents": len(keys), "collection": COLLECTION}))
         return
@@ -57,7 +57,7 @@ def main() -> None:
             payload.close()
         if response.get("FunctionError") or not isinstance(result.get("indexed_chunks"), int):
             raise SystemExit("Ingestion failed; inspect content-free Lambda metrics")
-        document_id = key.removesuffix(".pdf").replace("/", "-")
+        document_id = key.removesuffix(".md").removesuffix("-ch").replace("/", "-")
         digest = hashlib.sha256(version.encode()).hexdigest()
         manifest = f"_indexes/{COLLECTION}/{document_id}/{digest}.json"
         manifest_body = s3.get_object(Bucket=args.bucket, Key=manifest)["Body"]

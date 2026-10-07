@@ -241,20 +241,16 @@ Chat telemetry is logged as structured JSON to `/aws/lambda/knowledgellm-demo-kn
 
 Fictional educational prototype created for portfolio and technical demonstration purposes.
 
-## English / Traditional Chinese and PDF Sources
+## English / Traditional Chinese Markdown Sources
 
-Use the grouped **EN / CH** control to switch the interface and new chat answers. The preference persists in browser storage. Chinese suggested questions use the same document permissions as English; existing conversation messages retain their original language.
+Use the grouped **EN / CH** control to switch the interface, sources, and new chat answers. The preference persists in browser storage; existing conversation messages retain their original language.
 
-The six fictional sources have editable Markdown originals and searchable PDF artifacts. Generate PDFs after source edits:
+Each fictional source has an original English `.md` and a complete Traditional Chinese `-ch.md` translation, for example `finance/expense-policy.md` and `finance/expense-policy-ch.md`. Both variants live in the same private documents bucket. Chinese folder and citation links select the translated Markdown; English selects the original. PDFs are not used.
 
-```sh
-rtk proxy python3.12 scripts/generate-sample-pdfs.py
-```
-
-Deploy the updated ingestion package before uploading PDF artifacts to the existing `documents_bucket_name` bucket:
+After source edits, upload the twelve Markdown files to the existing bucket without deleting objects:
 
 ```sh
-rtk proxy aws s3 cp api/src/knowledgellm/sample_docs/ "s3://$DOCUMENTS_BUCKET/" --recursive --exclude '*' --include '*.pdf' --content-type application/pdf
+rtk proxy aws s3 cp api/src/knowledgellm/sample_docs/ "s3://$DOCUMENTS_BUCKET/" --recursive --exclude '*' --include '*.md' --content-type 'text/plain; charset=utf-8'
 ```
 
-Keep the existing Markdown objects and version history. Verify completed index manifests for all six current PDF versions before deploying the updated chat API; source links then open authorized PDFs. PDF ingestion requires selectable text and rejects encrypted or scanned-only files. The [implementation record](docs/superpowers/plans/2026-10-07-traditional-chinese-and-pdf.md) contains validation and rollout evidence.
+Ingestion records immutable source-version manifests. Retrieval uses only completed versions for the selected language; department authorization remains mandatory. Bedrock model authorization is still required for indexing and grounded chat, but source listing/opening does not depend on model access. See the [correction and validation record](docs/superpowers/plans/2026-10-07-traditional-chinese-markdown.md).

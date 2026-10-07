@@ -129,7 +129,7 @@ describe("Knowledge API boundary", () => {
       knowledgeApi.openDocument("access-token", "finance/id with spaces"),
     ).rejects.toThrow();
     expect(sentUrl).toBe(
-      "https://api.example.com/documents/finance%2Fid%20with%20spaces",
+      "https://api.example.com/documents/finance%2Fid%20with%20spaces?language=en",
     );
   });
   it("returns the authorized HTTPS source URL from the document envelope", async () => {
@@ -156,3 +156,44 @@ describe("Knowledge API boundary", () => {
     );
   });
 });
+
+it.each(["en", "zh-TW"] as const)(
+  "selects %s document lists and source links",
+  async (language) => {
+    appConfig.apiUrl = "https://api.example.com";
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      urls.push(url);
+      return new Response(
+        JSON.stringify(
+          url.includes("/documents/source")
+            ? {
+                document: {
+                  id: "source",
+                  title: "Source",
+                  url: `https://docs.example.com/source${language === "zh-TW" ? "-ch" : ""}.md`,
+                },
+              }
+            : {
+                documents: [
+                  { id: "source", title: "Source", department: "finance" },
+                ],
+              },
+        ),
+      );
+    });
+    await knowledgeApi.loadDocuments("access", language);
+    const destination = await knowledgeApi.openDocument(
+      "access",
+      "source",
+      language,
+    );
+    expect(urls).toEqual([
+      `https://api.example.com/documents?language=${language}`,
+      `https://api.example.com/documents/source?language=${language}`,
+    ]);
+    expect(destination).toBe(
+      `https://docs.example.com/source${language === "zh-TW" ? "-ch" : ""}.md`,
+    );
+  },
+);

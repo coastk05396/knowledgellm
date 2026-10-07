@@ -1,5 +1,7 @@
 # Traditional Chinese and PDF Sources
 
+Historical record: superseded by the user's [Markdown correction](2026-10-07-traditional-chinese-markdown.md). PDFs are not part of the current source contract.
+
 ## Scope and Decisions
 
 The existing React/Vite and Python Lambda app gains a Traditional Chinese interface and chat output. The language control follows the reference résumé's grouped EN / CH buttons. The six current fictional sources become text-based PDFs in the existing documents bucket, preserving document IDs, department authorization, original Markdown objects, and S3 version history. Source content stays in its original English; selected Chinese chat answers translate supported facts.

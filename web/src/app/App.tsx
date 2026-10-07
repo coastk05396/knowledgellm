@@ -4,7 +4,7 @@ import {
   LanguageSwitch,
   useLanguage,
 } from "./language";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
@@ -43,37 +43,49 @@ function WorkspaceContent({
     null,
   );
   const [cost, setCost] = useState<number | null>(null);
+  const documentGeneration = useRef(0);
+  const pendingSourceWindows = useRef(new Set<Window>());
   useEffect(() => {
-    let active = true;
-    setDocuments([]);
     setSuggestion(null);
     setMessages([]);
     setChatFailed(false);
     setCost(null);
     setError(null);
+  }, [session, api]);
+  useEffect(() => {
+    const generation = ++documentGeneration.current;
+    let active = true;
+    setDocuments([]);
+    setError(null);
+    const invalidate = () => {
+      active = false;
+      documentGeneration.current++;
+      pendingSourceWindows.current.forEach((source) => source.close());
+      pendingSourceWindows.current.clear();
+    };
     if (!session) {
       setLoading(false);
-      return;
+      return invalidate;
     }
     setLoading(true);
     api
-      .loadDocuments(session.accessToken)
+      .loadDocuments(session.accessToken, language)
       .then((docs) => {
-        if (active) setDocuments(docs);
+        if (active && generation === documentGeneration.current)
+          setDocuments(docs);
       })
       .catch(() => {
-        if (active)
+        if (active && generation === documentGeneration.current)
           setError(
             "Documents are unavailable. Please check your connection and sign in again.",
           );
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && generation === documentGeneration.current)
+          setLoading(false);
       });
-    return () => {
-      active = false;
-    };
-  }, [session, api]);
+    return invalidate;
+  }, [session, api, language]);
   const departments = identities
     .filter((person) =>
       documents.some((doc) => doc.department === person.department),
@@ -85,7 +97,7 @@ function WorkspaceContent({
     .map((person) => t(person.label))
     .join(" & ");
   const openDocument = async (id: string) => {
-    if (!session || !documents.some((doc) => doc.id === id)) {
+    if (!session || loading || !documents.some((doc) => doc.id === id)) {
       setError("This source is not available to your account.");
       return;
     }
@@ -97,14 +109,20 @@ function WorkspaceContent({
       return;
     }
     sourceWindow.opener = null;
+    const generation = documentGeneration.current;
+    pendingSourceWindows.current.add(sourceWindow);
     try {
-      const url = await api.openDocument(session.accessToken, id);
+      const url = await api.openDocument(session.accessToken, id, language);
+      if (generation !== documentGeneration.current) return;
       if (new URL(url).protocol !== "https:")
         throw new Error("Invalid source URL");
       sourceWindow.location.replace(url);
     } catch {
       sourceWindow.close();
-      setError("The source could not be opened. Please try again.");
+      if (generation === documentGeneration.current)
+        setError("The source could not be opened. Please try again.");
+    } finally {
+      pendingSourceWindows.current.delete(sourceWindow);
     }
   };
   const send = async (question: string) => {
@@ -143,6 +161,9 @@ function WorkspaceContent({
     }
   };
   const switchAccount = (department?: string) => {
+    documentGeneration.current++;
+    pendingSourceWindows.current.forEach((source) => source.close());
+    pendingSourceWindows.current.clear();
     setDocuments([]);
     setSuggestion(null);
     setMessages([]);
@@ -187,6 +208,7 @@ function WorkspaceContent({
       </aside>
       <main className="chat-area">
         <ChatPanel
+          documents={documents}
           name={name}
           departments={departments}
           signedIn={Boolean(session)}

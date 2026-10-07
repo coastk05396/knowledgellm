@@ -33,6 +33,8 @@ Delivery: implementation commit `2c660cc` has a locally verified SSH signature a
 
 No AWS deployment, index migration, cache enabling, or live Bedrock/Qdrant/Groq calls occurred. All 15 live retrieval/grounding checks, invocation metrics, a second Lambda environment, and actual latency measurements remain pending approved rollout. The remote plan includes rebuilt standalone auth ZIP metadata; authentication source/behavior is unchanged. See [migration operations](cohere-demo-cache-operations.md) for the gated rollout and rollback procedure.
 
-## Traditional Chinese and PDF Sources
+## Traditional Chinese Markdown Correction
 
-Implementation and independent source review are complete; 158 backend tests, 47 frontend tests, production build, Terraform validation, and real Cognito/local UI checks pass. All six PDFs were uploaded to the existing private bucket. Live PDF indexing is blocked by Bedrock model authorization (NOT_AUTHORIZED / Operation not allowed), including an administrator probe; the chat cutover remains pending. See the [implementation and rollout record](superpowers/plans/2026-10-07-traditional-chinese-and-pdf.md).
+The user clarified that the sources must be translated Markdown (`-ch.md`), not PDFs. Backend owns translations, Markdown storage/catalog, language-specific index versions, migration tooling and tests. Frontend owns language-aware listing/source requests and stale-response protection. Coordinator owns requirements, live S3 upload, deployment, integrated browser verification and PR updates. The existing EN/CH interface stays in place.
+
+Markdown correction is implemented and deployed: all twelve real S3 source downloads, language selection, inline UTF-8 display, and department isolation are verified. Backend 167 tests and frontend 52 tests pass; production build passes. Local and Cloudflare Chrome checks confirm Sam opens actual Chinese -ch.md in CH and original English .md in EN. Bedrock remains NOT_AUTHORIZED; indexing and grounded chat remain unverified. See the [correction record](superpowers/plans/2026-10-07-traditional-chinese-markdown.md).

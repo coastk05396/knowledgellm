@@ -18,12 +18,12 @@ class Versions:
         self.snapshot = SNAPSHOT
         self.unavailable = False
 
-    def current(self, departments):
+    def current(self, departments, language="en"):
         if self.unavailable:
             raise IndexUnavailable
         return self.snapshot
 
-    def is_current(self, snapshot, departments):
+    def is_current(self, snapshot, departments, language="en"):
         return not self.unavailable and snapshot == self.snapshot
 
 
@@ -258,7 +258,15 @@ def test_chinese_cache_is_persistent_and_isolated_from_english():
     from knowledgellm.cached_chat import answer_with_cache
 
     cache = Cache()
-    versions = Versions()
+    class LanguageVersions(Versions):
+        languages = []
+        def current(self, departments, language="en"):
+            self.languages.append(language)
+            return super().current(departments, language)
+        def is_current(self, snapshot, departments, language="en"):
+            self.languages.append(language)
+            return super().is_current(snapshot, departments, language)
+    versions = LanguageVersions()
     english = ask(cache=cache, versions=versions)
     chinese_question = demo_questions()[0]["question_zh"]
     class ChineseGenerator:
@@ -276,6 +284,8 @@ def test_chinese_cache_is_persistent_and_isolated_from_english():
     assert cached.answer != english.answer
     assert cached.usage == Usage(0, 0, 0.0)
     assert len(cache.entries) == 2
+    assert versions.languages == ["en", "en", "zh-TW", "zh-TW", "zh-TW", "zh-TW"]
+    assert cached.citations[0].title == "第四季預算概覽"
 
 
 def test_chinese_grounding_refusal_is_never_cached():

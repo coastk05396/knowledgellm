@@ -217,3 +217,44 @@ def test_traditional_chinese_provider_failure_has_safe_localized_message(monkeyp
     }, object())
     assert response["statusCode"] == 503
     assert json.loads(response["body"]) == {"error": "assistant_unavailable", "message": "助理暫時無法使用，請稍後再試。"}
+
+
+@pytest.mark.parametrize("path", ["/documents", "/documents/finance-expense-policy"])
+@pytest.mark.parametrize("language", ["zh-CN", "fr", ""])
+def test_document_routes_reject_invalid_language_before_storage(path, language):
+    response = handler.handler({"rawPath": path, "queryStringParameters": {"language": language},
+        "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}}, object())
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"]) == {"error": "invalid_language"}
+
+
+def test_chinese_document_list_and_link_keep_department_acl(monkeypatch):
+    calls = []
+    class Storage:
+        def __init__(self, bucket):
+            assert bucket == "same-bucket"
+        def presigned_get_url(self, key, expires_in):
+            calls.append((key, expires_in))
+            return "https://private-source.example/signed"
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", Storage)
+    event = {"rawPath": "/documents", "queryStringParameters": {"language": "zh-TW"},
+        "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}}
+    response = handler.handler(event, object())
+    documents = json.loads(response["body"])["documents"]
+    assert [d["title"] for d in documents] == ["第四季預算概覽", "費用報銷政策"]
+    assert all(d["department"] == "finance" for d in documents)
+    event["rawPath"] = "/documents/finance-expense-policy"
+    event["pathParameters"] = {"documentId": "finance-expense-policy"}
+    response = handler.handler(event, object())
+    assert response["statusCode"] == 200
+    assert json.loads(response["body"])["document"]["title"] == "費用報銷政策"
+    assert calls == [("finance/expense-policy-ch.md", 120)]
+    event["rawPath"] = "/documents/people-leave-policy"
+    event["pathParameters"] = {"documentId": "people-leave-policy"}
+    assert handler.handler(event, object())["statusCode"] == 404
+    assert len(calls) == 1

@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class IndexVersions(Protocol):
-    def current(self, departments: frozenset[str]) -> IndexSnapshot: ...
-    def is_current(self, snapshot: IndexSnapshot, departments: frozenset[str]) -> bool: ...
+    def current(self, departments: frozenset[str], language: Language = "en") -> IndexSnapshot: ...
+    def is_current(self, snapshot: IndexSnapshot, departments: frozenset[str], language: Language = "en") -> bool: ...
 
 
 def safe_cached_answer(answer: ChatAnswer, departments: frozenset[str], guardrails: Guardrails) -> bool:
@@ -48,7 +48,7 @@ def answer_with_cache(
     authorized = departments & ALLOWED_DEPARTMENTS
     timings: dict[str, float] = {}
     start = time.perf_counter()
-    snapshot = versions.current(authorized) if versions is not None else None
+    snapshot = versions.current(authorized, language) if versions is not None else None
     timings["index_check"] = round((time.perf_counter() - start) * 1000, 3)
     question_id = demo_question_id(question, authorized, language)
     key = cache_key(question_id, authorized, snapshot.fingerprint, language) if question_id and snapshot and cache else None
@@ -63,10 +63,10 @@ def answer_with_cache(
         timings["cache_read"] = round((time.perf_counter() - start) * 1000, 3)
         if cached is not None and safe_cached_answer(cached, authorized, guardrails):
             start = time.perf_counter()
-            if versions is None or not versions.is_current(snapshot, authorized):
+            if versions is None or not versions.is_current(snapshot, authorized, language):
                 raise IndexUnavailable
             timings["index_recheck"] = round((time.perf_counter() - start) * 1000, 3)
-            documents = {document.id: document for document in list_documents(authorized)}
+            documents = {document.id: document for document in list_documents(authorized, language)}
             return replace(cached, usage=Usage(0, 0, 0.0), cache_status="hit",
                            citations=tuple(Citation(c.document_id, documents[c.document_id].title)
                                            for c in cached.citations), stage_timings_ms=timings)
@@ -95,7 +95,7 @@ def answer_with_cache(
     result = answer_question(question, authorized, SnapshotRetriever(), TimedGenerator(), guardrails, language)
     if versions is not None and snapshot is not None:
         start = time.perf_counter()
-        if not versions.is_current(snapshot, authorized):
+        if not versions.is_current(snapshot, authorized, language):
             raise IndexUnavailable
         timings["index_recheck"] = round((time.perf_counter() - start) * 1000, 3)
     if key and cache and result.cacheable and safe_cached_answer(result, authorized, guardrails):

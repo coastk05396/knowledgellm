@@ -1,6 +1,6 @@
 import { useLanguage } from "../app/language";
 import { FileText, MessageSquare, Plus, Sparkles } from "lucide-react";
-import type { ChatAnswer, Department } from "../app/api";
+import type { ChatAnswer, Department, DocumentSummary } from "../app/api";
 import { identities } from "./IdentityPicker";
 import demoQuestions from "../../../api/src/knowledgellm/demo_questions.json";
 export interface Message {
@@ -8,6 +8,7 @@ export interface Message {
   response: ChatAnswer;
 }
 export function ChatPanel({
+  documents,
   name,
   departments,
   messages,
@@ -17,6 +18,7 @@ export function ChatPanel({
   signedIn,
   onSuggestion,
 }: {
+  documents: DocumentSummary[];
   name: string;
   departments: Department[];
   messages: Message[];
@@ -100,17 +102,23 @@ export function ChatPanel({
                   <p className="message-label">{t("KnowledgeLLM assistant")}</p>
                   <p className="message-text">{message.response.answer}</p>
                   <div className={`citations ${departments[0] ?? "finance"}`}>
-                    {message.response.citations.map((citation) => (
-                      <button
-                        key={citation.document_id}
-                        onClick={() => onOpen(citation.document_id)}
-                        aria-label={`${t("Source:")} ${t(citation.title)}`}
-                      >
-                        <FileText size={18} />
-                        {t(citation.title)}
-                        <span aria-hidden="true">↗</span>
-                      </button>
-                    ))}
+                    {message.response.citations.map((citation) => {
+                      const title = t(
+                        documents.find((doc) => doc.id === citation.document_id)
+                          ?.title ?? citation.title,
+                      );
+                      return (
+                        <button
+                          key={citation.document_id}
+                          onClick={() => onOpen(citation.document_id)}
+                          aria-label={`${t("Source:")} ${title}`}
+                        >
+                          <FileText size={18} />
+                          {title}
+                          <span aria-hidden="true">↗</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

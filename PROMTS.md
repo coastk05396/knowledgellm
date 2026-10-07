@@ -42,7 +42,7 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 ## Cohere Migration and Fixed Demo Answer Cache
 
 - Share one JSON catalog of exactly 15 stable-ID suggested questions (five each for Finance, Operations, People). Match only exact text after trimming leading/trailing whitespace; preserve case and internal whitespace. Custom questions use normal retrieval/generation and never store answers.
-- Reindex the six approved S3 document versions into the separate `knowledgellm-cohere-v3` Qdrant collection; never mix embedding dimensions/models or delete the old collection during migration. Reuse Bedrock, Qdrant, and Groq service clients.
+- Reindex the twelve approved English/Traditional Chinese S3 Markdown document versions into the separate `knowledgellm-cohere-v3` Qdrant collection; never mix embedding dimensions/models or delete the old collection during migration. Reuse Bedrock, Qdrant, and Groq service clients.
 - Use one encrypted DynamoDB on-demand table (`pk` string, TTL attribute `expires_at`) for cross-Lambda answer sharing. Cache items expire after 86,400 seconds; check expiry at read time because TTL deletion is asynchronous. Enable with `ANSWER_CACHE_ENABLED=true` only after migration verification; default is disabled. No Redis, embedding cache, or container migration.
 - Validate verified login, full authorized department scope, and question PII before any cache read. Key includes fixed question ID/text, full scope, indexed document-version fingerprint, embedding/generation models, collection, prompt version, and guardrail version.
 - Store only successful grounded answers with valid authorized citations and passed or safely masked PII outcomes. Never store tokens, presigned links, errors, refusals, or answers without valid sources. Recheck output PII and citation permission on hits.
@@ -85,13 +85,15 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 
 The all-AWS managed architecture in README is an undeployed reference option, not the selected low-cost demo or authorization to provision it.
 
-## Traditional Chinese and PDF Sources
+## Traditional Chinese and Markdown Sources
 
 - Provide complete English and Traditional Chinese (`zh-TW`) interfaces, including authentication states, department names, document/citation titles, suggested questions, errors, and telemetry labels.
 - Match the résumé site's grouped `EN` / `CH` language buttons, indicate the active language accessibly, persist the selection, and update the document language. Preserve the current graphite design and responsive layout.
-- Send the selected language with chat requests; default older clients to English. Generate grounded answers and guardrail refusals in the selected language without changing department permissions.
-- Convert all six current fictional sources to text-based PDFs. Keep Markdown as the editable source, ingest PDF text, and open PDFs through authorized short-lived source links.
-- Store all six PDFs in the existing private S3 documents bucket under their existing department prefixes; retain existing Markdown objects and version history. Do not create a second documents bucket or delete runtime data.
-- Verify English/Chinese switching, persistence, desktop/mobile rendering, Chinese cited chat and refusals, PDF extraction, all six live S3 objects, authorized PDF links, and cross-department denial.
+- Maintain six complete Traditional Chinese translations beside the six original English Markdown sources. Use `-ch.md` filenames, such as `finance/expense-policy-ch.md`, preserving every fact, number, rule, and fictional-data notice.
+- Store all twelve Markdown sources in the existing private S3 documents bucket under the existing department prefixes. Do not use PDF artifacts for ingestion or source links. Previously uploaded PDF objects may remain as unused history; do not delete runtime objects without an explicit cleanup instruction.
+- Send the selected language with document-list, document-open, and chat requests; default older clients to English. Chinese listings, folder source links and citation links must open the matching `-ch.md`; English opens the original `.md`.
+- Use language-specific immutable source-version snapshots for retrieval and answer caching, retaining stable logical document IDs, verified department permissions, and safe unavailable behavior for incomplete indexes. Generate grounded answers and guardrail refusals in the selected language.
+- Switching languages refreshes document listing, prevents stale responses or URLs from opening the wrong variant, and preserves conversation messages.
+- Verify all twelve live S3 Markdown objects and source contents, both-language authorized source/citation links, cross-department denial, responsive persisted toggle behavior, bilingual index isolation and Chinese cited chat/refusals.
 
-Acceptance status is recorded in the [translation and PDF implementation record](docs/superpowers/plans/2026-10-07-traditional-chinese-and-pdf.md).
+Acceptance status is recorded in the [Markdown correction record](docs/superpowers/plans/2026-10-07-traditional-chinese-markdown.md). This supersedes the earlier PDF interpretation.

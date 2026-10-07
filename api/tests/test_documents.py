@@ -32,7 +32,7 @@ def test_document_open_authorizes_before_storage_and_uses_short_lived_link() -> 
     assert storage.calls == []
     link = open_document("finance-q4-budget-overview", frozenset({"finance"}), storage)
     assert link.url == "https://storage.example/signed"
-    assert storage.calls == [("finance/q4-budget-overview.pdf", 120)]
+    assert storage.calls == [("finance/q4-budget-overview.md", 120)]
 
 
 def test_s3_document_read_rejects_oversized_sources_before_streaming(monkeypatch) -> None:
@@ -61,7 +61,7 @@ def test_s3_document_read_rejects_oversized_sources_before_streaming(monkeypatch
     storage = S3DocumentStorage("private-bucket", Client())
 
     with pytest.raises(ValueError):
-        storage.read_document("finance/q4-budget-overview.pdf")
+        storage.read_document("finance/q4-budget-overview.md")
 
     assert not body.called
 
@@ -71,13 +71,13 @@ def test_versioned_document_read_uses_exact_version_and_closes_body():
     from knowledgellm.documents import S3DocumentStorage
 
     from pathlib import Path
-    contents = (Path(__file__).parents[1] / "src/knowledgellm/sample_docs/finance/expense-policy.pdf").read_bytes()
+    contents = (Path(__file__).parents[1] / "src/knowledgellm/sample_docs/finance/expense-policy.md").read_bytes()
     body = io.BytesIO(contents)
     class Client:
         def get_object(self, **kwargs):
-            assert kwargs == {"Bucket": "bucket", "Key": "finance/expense-policy.pdf", "VersionId": "v1"}
+            assert kwargs == {"Bucket": "bucket", "Key": "finance/expense-policy.md", "VersionId": "v1"}
             return {"ContentLength": len(contents), "Body": body}
-    assert "Corporate Expense Policy" in S3DocumentStorage("bucket", Client()).read_document("finance/expense-policy.pdf", "v1")
+    assert "Corporate Expense Policy" in S3DocumentStorage("bucket", Client()).read_document("finance/expense-policy.md", "v1")
     assert body.closed
 
 
@@ -101,46 +101,45 @@ def test_s3_verification_connection_has_bounded_timeouts_and_is_reused(monkeypat
         s3_client.cache_clear()
 
 
-@pytest.mark.parametrize("invalid_pdf", [False, True])
-def test_s3_pdf_read_extracts_text_and_closes_stream_on_parse_failure(monkeypatch, invalid_pdf) -> None:
-    from io import BytesIO
-    from pathlib import Path
-    import sys
-    from types import SimpleNamespace
-    from knowledgellm.documents import S3DocumentStorage
+@pytest.mark.parametrize("language, key, title", [
+    ("en", "finance/expense-policy.md", "Expense policy"),
+    ("zh-TW", "finance/expense-policy-ch.md", "費用報銷政策"),
+])
+def test_document_language_selects_source_without_changing_identity_or_acl(language, key, title):
+    from knowledgellm.documents import document_for_key, source_key_for_id
+    storage = FakeStorage(calls=[])
+    link = open_document("finance-expense-policy", frozenset({"finance"}), storage, language)
+    assert (link.id, link.title) == ("finance-expense-policy", title)
+    assert storage.calls == [(key, 120)]
+    assert source_key_for_id(link.id, language) == key
+    assert document_for_key(key).id == link.id
+    assert document_for_key(key).title == title
+    with pytest.raises(AuthorizationError):
+        open_document(link.id, frozenset({"people"}), storage, language)
+    assert len(storage.calls) == 1
 
-    sample = Path(__file__).parents[1] / "src/knowledgellm/sample_docs/finance/q4-budget-overview.pdf"
-    contents = b"not a PDF" if invalid_pdf else sample.read_bytes()
-    body = BytesIO(contents)
+
+def test_s3_chinese_markdown_decodes_utf8_and_closes_stream():
+    from io import BytesIO
+    from knowledgellm.documents import S3DocumentStorage
+    text = "費用須於 14 個日曆日內提交。"
+    data = text.encode("utf-8")
+    body = BytesIO(data)
     class Client:
         def get_object(self, **kwargs):
-            assert kwargs == {"Bucket": "existing-private-bucket", "Key": "finance/q4-budget-overview.pdf"}
-            return {"ContentLength": len(contents), "Body": body}
-    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=lambda _name: Client()))
-    storage = S3DocumentStorage("existing-private-bucket", Client())
-    if invalid_pdf:
-        with pytest.raises(Exception):
-            storage.read_document("finance/q4-budget-overview.pdf")
-    else:
-        assert "108,000 credits" in storage.read_document("finance/q4-budget-overview.pdf")
+            assert kwargs == {"Bucket": "existing-bucket", "Key": "finance/expense-policy-ch.md", "VersionId": "zh-version"}
+            return {"ContentLength": len(data), "Body": body}
+    assert S3DocumentStorage("existing-bucket", Client()).read_document("finance/expense-policy-ch.md", "zh-version") == text
     assert body.closed
 
 
-def test_text_free_pdf_is_rejected_without_clearing_previous_index(monkeypatch) -> None:
-    from io import BytesIO
-    import sys
-    from types import SimpleNamespace
-    from pypdf import PdfWriter
+def test_markdown_presigned_url_has_utf8_inline_headers_and_short_expiry():
     from knowledgellm.documents import S3DocumentStorage
-
-    output = BytesIO()
-    writer = PdfWriter()
-    writer.add_blank_page(width=612, height=792)
-    writer.write(output)
-    contents = output.getvalue()
     class Client:
-        def get_object(self, **_kwargs):
-            return {"ContentLength": len(contents), "Body": BytesIO(contents)}
-    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=lambda _name: Client()))
-    with pytest.raises(ValueError, match="selectable text"):
-        S3DocumentStorage("private-bucket", Client()).read_document("finance/q4-budget-overview.pdf")
+        def generate_presigned_url(self, operation, Params, ExpiresIn):
+            assert operation == "get_object"
+            assert Params == {"Bucket": "same-bucket", "Key": "finance/expense-policy-ch.md",
+                              "ResponseContentType": "text/plain; charset=utf-8", "ResponseContentDisposition": "inline"}
+            assert ExpiresIn == 120
+            return "signed-url"
+    assert S3DocumentStorage("same-bucket", Client()).presigned_get_url("finance/expense-policy-ch.md", 120) == "signed-url"
