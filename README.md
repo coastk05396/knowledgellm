@@ -60,9 +60,55 @@ Cache: exactly 15 suggested questions, 24-hour TTL, disabled by default. Custom 
 
 ## All-AWS Reference
 
-Undeployed alternative using Bedrock Knowledge Bases, Titan embeddings, OpenSearch Serverless, Nova Pro, and Step Functions.
+Proposed architecture · not deployed.
 
-![KnowledgeLLM All-AWS Managed Reference Architecture](docs/design/architecture/knowledgellm-all-aws-architecture.webp)
+**Frontend:** React · TypeScript · Vite
+
+**Backend:** Python 3.12 Lambda · Bedrock Knowledge Bases · Titan Embeddings V2 · Nova Pro · Bedrock Guardrails · OpenSearch Serverless
+
+**Infra:** Route 53 · Amplify Hosting · Cognito · API Gateway · S3 · EventBridge · Step Functions · IAM · KMS · CloudWatch · X-Ray · CloudTrail
+
+```text
+FRONTEND / SIGN-IN
+  Route 53 → Amplify Hosting → React UI ⇄ Cognito
+                                  │ access token
+                                  ▼
+CHAT
+  API Gateway (JWT) → Lambda (department scope)
+                          │
+                          ▼
+                 Bedrock Knowledge Bases
+                          │
+                          ▼
+                 Titan V2 (query vector)
+                          │
+                          ▼
+        ┌────────────────────────────────────┐
+        │ OpenSearch Serverless · Chunk DB   │
+        │ Chunk 1 · Chunk 2 · Chunk 3        │
+        │ Text + vector + source metadata    │
+        │ Department filters                 │
+        └─────────────────┬──────────────────┘
+                          │ matching chunks
+                          ▼
+  Input / source Guardrails → Nova Pro → Output Guardrails
+                                             │
+                                             ▼
+                              Lambda citation checks → UI
+
+INGESTION
+  S3 → EventBridge → Step Functions + Lambda
+                              │
+                              ▼
+                  Knowledge Bases ingestion → Titan V2
+                                                 │ vectors
+                                                 ▼
+                                  OpenSearch Chunk DB
+
+SUPPORTING SERVICES
+  IAM / KMS → Access / encryption
+  CloudWatch / X-Ray / CloudTrail → Logs / traces / audit
+```
 
 ## Security & Telemetry
 
