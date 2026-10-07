@@ -32,8 +32,19 @@ export function DepartmentFolders({
         <p>{t("Each folder is linked to one user")}</p>
       </div>
       {loading && (
-        <p className="folder-loading" role="status">
-          {t("Loading")}
+        <p
+          className="folder-loading"
+          role="status"
+          aria-label={`${t("Loading")}...`}
+        >
+          <span aria-hidden="true">
+            {t("Loading")}
+            <span className="thinking-dots">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </span>
         </p>
       )}
       <div className="folder-list">
