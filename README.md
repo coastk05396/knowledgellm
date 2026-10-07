@@ -26,22 +26,30 @@ CHAT / DOCUMENT ACCESS
                                                │
                                                ▼
                                          DynamoDB cache
-                                          │          │
-                                         HIT    MISS / BYPASS
-                                          │          ▼
-                                          │    Bedrock Cohere → Qdrant
-                                          │          │ scoped excerpts
-                                          │          ▼
-                                          │      Groq → Validation
-                                          │          ├── Eligible write → DynamoDB
-                                          ▼          ▼
+                                          │                       │
+                                         HIT                MISS / BYPASS
+                                          │                       ▼
+                                          │     Bedrock Cohere (query vector)
+                                          │                       │
+                                          │                       ▼
+                                          │     ┌────────────────────────────────────┐
+                                          │     │ Qdrant Cloud · Chunk DB            │
+                                          │     │ Chunk 1 · Chunk 2 · Chunk 3        │
+                                          │     │ Text + vector + source metadata    │
+                                          │     │ Department / version filters       │
+                                          │     └─────────────────┬──────────────────┘
+                                          │                       │ matching chunks
+                                          │                       ▼
+                                          │                 Groq → Validation
+                                          │                       ├── Eligible write → DynamoDB
+                                          ▼                       ▼
                                         Answer + citations → UI
 
 INGESTION
   S3 upload → EventBridge → Ingestion Lambda → Bedrock Cohere
                                   ▲                  │ vectors
                                   │ read version     ▼
-                                  S3 ◄── Manifest ── Qdrant
+                                  S3 ◄── Manifest ── Qdrant Chunk DB
 
 SUPPORTING SERVICES
   Lambdas → Parameter Store (keys) / CloudWatch (logs)
