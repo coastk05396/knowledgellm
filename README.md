@@ -8,42 +8,34 @@ A fictional enterprise knowledge demo for Finance, Operations, and People. The b
 
 ### Frontend
 
-| Technology | Use case |
-|---|---|
-| **React 19 + TypeScript** | Typed chat UI, department folders, persona switching, citations, and guardrail/token feedback. |
-| **Vite** | Local development server and production asset builds. |
-| **Lucide React + IBM Plex fonts** | Interface icons and readable sans-serif/monospace typography. |
-| **Vitest + Testing Library** | Component and interaction tests. |
+- **React 19 + TypeScript**
+- **Vite**
+- **Lucide React + IBM Plex fonts**
+- **Vitest + Testing Library**
 
 ### Backend
 
-| Technology | Use case |
-|---|---|
-| **Python 3.12** | API handlers, document ingestion, authorization, PII checks, and citation validation. |
-| **Amazon Bedrock · Cohere Multilingual v3** | Converts documents (`search_document`) and questions (`search_query`) into 1,024-dimensional vectors in `ap-southeast-1`. |
-| **Qdrant Cloud** | Stores document chunks and vectors; searches with authorized department and indexed source-version filters. |
-| **Groq Cloud · `openai/gpt-oss-20b`** | Generates structured answers and citation IDs from retrieved excerpts. |
-| **boto3 + Qdrant/Groq SDKs** | Connects backend handlers to AWS storage, embeddings, caching, and external providers. |
-| **pytest** | Tests authentication, permissions, ingestion, chat, cache behavior, and provider failures. |
+- **Python 3.12**
+- **Amazon Bedrock · Cohere Multilingual v3**
+- **Qdrant Cloud**
+- **Groq Cloud · `openai/gpt-oss-20b`**
+- **boto3 + Qdrant/Groq SDKs**
+- **pytest**
 
 ### Infra
 
-The hybrid stack is defined in [`infra/terraform/`](infra/terraform/), with a maintained [`template.yaml`](template.yaml) for AWS SAM. This describes the repository configuration; it is not a fresh verification of the live deployment.
-
-| Service / Tool | Use case |
-|---|---|
-| **Amazon Cognito** | Issues access tokens through custom demo challenges; department groups define each persona's access. |
-| **Amazon API Gateway · HTTP API** | Validates JWTs and routes document/chat requests to the knowledge Lambda; configures browser CORS. |
-| **AWS Lambda · knowledge** | Serves document listings, authorized source links, and chat; coordinates cache lookup, retrieval, generation, and validation. |
-| **AWS Lambda · ingestion** | Reads approved Markdown document versions, chunks text, embeds it, and indexes it in Qdrant. |
-| **AWS Lambda · demo-auth** | Handles Cognito Define/Create/Verify challenge triggers for allowlisted fictional personas when `DEMO_MODE=true`. |
-| **Amazon S3** | Private, encrypted, versioned source documents and index-completion manifests; a separate bucket holds Lambda ZIP artifacts. |
-| **Amazon EventBridge** | Routes S3 Object Created events under `finance/`, `operations/`, and `people/` to ingestion Lambda. Manifest writes under `_indexes/` do not retrigger ingestion. |
-| **Amazon DynamoDB** | Encrypted, on-demand answer cache for exactly 15 suggested questions, with a 24-hour TTL and application-side expiry checks. |
-| **AWS Systems Manager Parameter Store** | Keeps Qdrant and Groq keys backend-only as SecureString parameters; existing Secrets Manager ARNs are also supported. |
-| **AWS IAM** | Separate Lambda roles scope access to documents, manifests, the cache table, embeddings, secrets, and logs. |
-| **Amazon CloudWatch Logs** | Captures structured request, cache, token, and guardrail telemetry; Lambda logs have seven-day retention. |
-| **Terraform + AWS SAM** | Terraform provisions the hybrid AWS resources with encrypted S3 remote state and locking; SAM maintains an alternative deployment template. |
+- **Amazon Cognito**
+- **Amazon API Gateway · HTTP API**
+- **AWS Lambda · knowledge**
+- **AWS Lambda · ingestion**
+- **AWS Lambda · demo-auth**
+- **Amazon S3**
+- **Amazon EventBridge**
+- **Amazon DynamoDB**
+- **AWS Systems Manager Parameter Store**
+- **AWS IAM**
+- **Amazon CloudWatch Logs**
+- **Terraform + AWS SAM**
 
 ## Hybrid Workflow
 
