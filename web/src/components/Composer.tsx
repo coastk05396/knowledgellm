@@ -1,3 +1,4 @@
+import { useLanguage } from "../app/language";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, LockKeyhole } from "lucide-react";
 export function Composer({
@@ -15,6 +16,7 @@ export function Composer({
   access: string;
   suggestion?: { question: string } | null;
 }) {
+  const { t, language } = useLanguage();
   const [question, setQuestion] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -37,15 +39,17 @@ export function Composer({
       >
         <textarea
           ref={input}
-          aria-label="Your question"
+          aria-label={t("Your question")}
           rows={1}
           maxLength={4000}
           value={question}
           disabled={disabled || busy}
           placeholder={
             disabled
-              ? "Sign in to ask KnowledgeLLM…"
-              : `Ask ${access} as ${name}…`
+              ? t("Sign in to ask KnowledgeLLM…")
+              : language === "zh-TW"
+                ? `以 ${name} 的身分詢問${access}…`
+                : `Ask ${access} as ${name}…`
           }
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={(event) => {
@@ -63,7 +67,7 @@ export function Composer({
         <button
           type="submit"
           disabled={disabled || busy || !question.trim()}
-          aria-label="Send question"
+          aria-label={t("Send question")}
         >
           <ArrowUp />
         </button>
@@ -71,8 +75,10 @@ export function Composer({
       <p className="access-caption">
         <LockKeyhole size={14} />
         {disabled
-          ? "Protected documents · Sign-in required"
-          : `${name} → ${access} documents only`}
+          ? t("Protected documents · Sign-in required")
+          : language === "zh-TW"
+            ? `${name} → 僅限${access}文件`
+            : `${name} → ${access} documents only`}
       </p>
     </div>
   );

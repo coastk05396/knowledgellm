@@ -9,6 +9,10 @@ from knowledgellm.authz import ALLOWED_DEPARTMENTS
 from knowledgellm.documents import document_for_id, list_documents
 from knowledgellm.guardrails import Guardrails
 
+Language = Literal["en", "zh-TW"]
+
+NO_SOURCES_ZH = "現有文件沒有足夠資訊可以回答此問題。"
+
 NO_SOURCES = "The available documents do not contain enough information to answer."
 PII_REFUSAL = "For privacy, remove personal details from the question and try again."
 
@@ -59,19 +63,19 @@ class VersionedRetriever(Retriever, Protocol):
 
 class Generator(Protocol):
     def generate(
-        self, question: str, chunks: Sequence[RetrievedChunk]
+        self, question: str, chunks: Sequence[RetrievedChunk], language: Language = "en"
     ) -> tuple[str, list[str], Usage | None]: ...
 
 
 def validate_question(
-    question: str, departments: frozenset[str], guardrails: Guardrails,
+    question: str, departments: frozenset[str], guardrails: Guardrails, language: Language = "en",
 ) -> ChatAnswer | None:
     if not departments & ALLOWED_DEPARTMENTS:
-        return ChatAnswer("Your account does not have access to department documents.", (), guardrail_action="access_denied")
+        return ChatAnswer("您的帳號沒有存取部門文件的權限。" if language == "zh-TW" else "Your account does not have access to department documents.", (), guardrail_action="access_denied")
     if not question.strip() or len(question) > 4000:
-        return ChatAnswer("Enter a question of 1 to 4,000 characters.", (), guardrail_action="invalid_question")
+        return ChatAnswer("請輸入 1 至 4,000 個字元的問題。" if language == "zh-TW" else "Enter a question of 1 to 4,000 characters.", (), guardrail_action="invalid_question")
     if guardrails.contains_pii(question):
-        return ChatAnswer(PII_REFUSAL, (), guardrail_action="question_pii_blocked")
+        return ChatAnswer("為保護隱私，請移除問題中的個人資料後再試一次。" if language == "zh-TW" else PII_REFUSAL, (), guardrail_action="question_pii_blocked")
     return None
 
 
@@ -81,9 +85,11 @@ def answer_question(
     retriever: Retriever,
     generator: Generator,
     guardrails: Guardrails,
+    language: Language = "en",
 ) -> ChatAnswer:
+    no_sources = NO_SOURCES_ZH if language == "zh-TW" else NO_SOURCES
     authorized = departments & ALLOWED_DEPARTMENTS
-    refusal = validate_question(question, departments, guardrails)
+    refusal = validate_question(question, departments, guardrails, language)
     if refusal is not None:
         return refusal
 
@@ -105,12 +111,12 @@ def answer_question(
             )
         )
     if not chunks:
-        return ChatAnswer(NO_SOURCES, (), guardrail_action="no_sources")
+        return ChatAnswer(no_sources, (), guardrail_action="no_sources")
 
-    answer, cited_ids, usage = generator.generate(question.strip(), chunks)
+    answer, cited_ids, usage = generator.generate(question.strip(), chunks, language)
     if guardrails.contains_pii(answer):
         return ChatAnswer(
-            "The answer was blocked because it contained personal information.",
+            "回答包含個人資料，因此已遭封鎖。" if language == "zh-TW" else "The answer was blocked because it contained personal information.",
             (),
             usage,
             "answer_pii_blocked",
@@ -118,7 +124,7 @@ def answer_question(
             redacted_source_count,
         )
     if not answer.strip():
-        return ChatAnswer(NO_SOURCES, (), usage, "empty_answer", len(chunks), redacted_source_count)
+        return ChatAnswer(no_sources, (), usage, "empty_answer", len(chunks), redacted_source_count)
 
     valid_ids = {chunk.document_id for chunk in chunks}
     citations: list[Citation] = []
@@ -127,7 +133,7 @@ def answer_question(
         if document_id in valid_ids and document is not None:
             citations.append(Citation(document_id=document_id, title=document.title))
     if not citations:
-        return ChatAnswer(NO_SOURCES, (), usage, "invalid_citations", len(chunks), redacted_source_count)
+        return ChatAnswer(no_sources, (), usage, "invalid_citations", len(chunks), redacted_source_count)
     return ChatAnswer(
         answer=answer.strip()[:6000],
         citations=tuple(citations),
@@ -135,6 +141,6 @@ def answer_question(
         guardrail_action="source_pii_redacted" if redacted_source_count else "pass",
         retrieved_count=len(chunks),
         redacted_source_count=redacted_source_count,
-        cacheable=(answer.strip() != NO_SOURCES and all(doc_id in valid_ids for doc_id in cited_ids)
+        cacheable=(answer.strip() not in {NO_SOURCES, NO_SOURCES_ZH} and all(doc_id in valid_ids for doc_id in cited_ids)
                    and guardrails.redact(answer) == answer),
     )

@@ -8,12 +8,12 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Protocol
 
-from knowledgellm.chat import ChatAnswer, Citation
+from knowledgellm.chat import ChatAnswer, Citation, Language
 from knowledgellm.request_budget import require_time
 
 CACHE_TTL_SECONDS = 86_400
 # Bump these when the prompt, guardrail rules, or retrieval behavior changes.
-PROMPT_VERSION = "sources-json-v1"
+PROMPT_VERSION = "sources-json-language-v2"
 GUARDRAIL_VERSION = "basic-pii-v1"
 RETRIEVAL_VERSION = "cohere-versioned-v1"
 
@@ -28,14 +28,15 @@ def demo_questions() -> tuple[dict[str, str], ...]:
     return tuple(json.loads(files("knowledgellm").joinpath("demo_questions.json").read_text()))
 
 
-def demo_question_id(question: str, departments: frozenset[str]) -> str | None:
+def demo_question_id(question: str, departments: frozenset[str], language: Language = "en") -> str | None:
     return next((item["id"] for item in demo_questions()
-                 if item["question"] == question.strip() and item["department"] in departments), None)
+                 if item["question_zh" if language == "zh-TW" else "question"] == question.strip() and item["department"] in departments), None)
 
 
-def cache_key(question_id: str, departments: frozenset[str], index_fingerprint: str) -> str:
+def cache_key(question_id: str, departments: frozenset[str], index_fingerprint: str, language: Language = "en") -> str:
     identity = {
         "question_id": question_id,
+        "language": language,
         "catalog": demo_questions(),
         "departments": sorted(departments),
         "index": index_fingerprint,

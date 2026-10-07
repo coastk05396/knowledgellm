@@ -96,3 +96,13 @@ def test_key_partitions_document_versions_and_models(monkeypatch):
 def test_key_is_order_independent_for_same_complete_scope():
     assert cache_key("finance-01", frozenset(["finance", "people"]), "v1") == cache_key(
         "finance-01", frozenset(["people", "finance"]), "v1")
+
+
+def test_cache_catalog_matches_chinese_only_in_requested_language():
+    question = demo_questions()[0]
+    assert demo_question_id(question["question_zh"], frozenset({"finance"}), "zh-TW") == question["id"]
+    assert demo_question_id(question["question_zh"], frozenset({"finance"}), "en") is None
+    assert demo_question_id(question["question"], frozenset({"finance"}), "zh-TW") is None
+    assert demo_question_id(question["question_zh"], frozenset({"people"}), "zh-TW") is None
+    assert cache_key(question["id"], frozenset({"finance"}), "same-index", "en") != cache_key(
+        question["id"], frozenset({"finance"}), "same-index", "zh-TW")

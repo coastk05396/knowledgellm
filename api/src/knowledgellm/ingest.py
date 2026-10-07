@@ -82,7 +82,7 @@ def ingest_s3_object(
 ) -> int:
     key = _source_key(event)
     document = document_for_key(key)
-    if document is None or not key.endswith(".md"):
+    if document is None or not key.endswith(".pdf"):
         raise ValueError("document key is not in the approved catalog")
 
     from knowledgellm.providers import split_embedding_text

@@ -52,7 +52,7 @@ describe("Knowledge API boundary", () => {
       ).toBeUndefined();
     },
   );
-  it("sends only the question with a bearer token", async () => {
+  it("sends the question and selected language with a bearer token", async () => {
     appConfig.apiUrl = "https://api.example.com/";
     let sentUrl = "";
     let sent: RequestInit = {};
@@ -75,9 +75,25 @@ describe("Knowledge API boundary", () => {
     });
     expect(JSON.parse(sent.body as string)).toEqual({
       question: "What changed?",
+      language: "en",
     });
     expect(result.answer).toBe("Authorized answer");
     expect(result.cost_usd).toBeUndefined();
+  });
+  it("sends Traditional Chinese as the response language", async () => {
+    appConfig.apiUrl = "https://api.example.com";
+    let body = "";
+    vi.stubGlobal("fetch", async (_url: string, options: RequestInit) => {
+      body = options.body as string;
+      return new Response(
+        JSON.stringify({ answer: "核准預算", citations: [] }),
+      );
+    });
+    await knowledgeApi.askQuestion("access-token", "核准預算是多少？", "zh-TW");
+    expect(JSON.parse(body)).toEqual({
+      question: "核准預算是多少？",
+      language: "zh-TW",
+    });
   });
   it("rejects unknown departments rather than rendering their documents", async () => {
     appConfig.apiUrl = "https://api.example.com";

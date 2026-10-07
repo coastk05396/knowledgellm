@@ -8,12 +8,13 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "boto3>=1.38,<2",
+  "pypdf>=6,<7",
   "groq>=0.31,<1",
   "qdrant-client>=1.14,<2",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9"]
+dev = ["pytest>=8.3,<9", "reportlab>=4,<5"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -23,4 +24,4 @@ testpaths = ["tests"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-knowledgellm = ["sample_docs/**/*.md", "demo_questions.json"]
+knowledgellm = ["sample_docs/**/*.md", "sample_docs/**/*.pdf", "demo_questions.json"]

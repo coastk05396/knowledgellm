@@ -2,76 +2,91 @@
   {
     "id": "finance-01",
     "department": "finance",
-    "question": "What is the total approved Q4 budget?"
+    "question": "What is the total approved Q4 budget?",
+    "question_zh": "第四季核准的總預算是多少？"
   },
   {
     "id": "finance-02",
     "department": "finance",
-    "question": "What changed in the Q4 budget?"
+    "question": "What changed in the Q4 budget?",
+    "question_zh": "第四季預算有哪些變更？"
   },
   {
     "id": "finance-03",
     "department": "finance",
-    "question": "Which flight classes are allowed?"
+    "question": "Which flight classes are allowed?",
+    "question_zh": "允許搭乘哪些機艙等級？"
   },
   {
     "id": "finance-04",
     "department": "finance",
-    "question": "What is the hotel allowance per night?"
+    "question": "What is the hotel allowance per night?",
+    "question_zh": "每晚住宿補助是多少？"
   },
   {
     "id": "finance-05",
     "department": "finance",
-    "question": "When must expense reports be submitted?"
+    "question": "When must expense reports be submitted?",
+    "question_zh": "費用報銷報告須在何時提交？"
   },
   {
     "id": "operations-01",
     "department": "operations",
-    "question": "How quickly must a P1 incident be acknowledged?"
+    "question": "How quickly must a P1 incident be acknowledged?",
+    "question_zh": "P1 事件須在多久內確認？"
   },
   {
     "id": "operations-02",
     "department": "operations",
-    "question": "How often should P1 status updates be posted?"
+    "question": "How often should P1 status updates be posted?",
+    "question_zh": "P1 事件狀態應多久更新一次？"
   },
   {
     "id": "operations-03",
     "department": "operations",
-    "question": "Who handles on-call escalation?"
+    "question": "Who handles on-call escalation?",
+    "question_zh": "誰負責值班事件的升級處理？"
   },
   {
     "id": "operations-04",
     "department": "operations",
-    "question": "What must be included in a shift handoff?"
+    "question": "What must be included in a shift handoff?",
+    "question_zh": "輪班交接須包含哪些內容？"
   },
   {
     "id": "operations-05",
     "department": "operations",
-    "question": "When are routine maintenance windows scheduled?"
+    "question": "When are routine maintenance windows scheduled?",
+    "question_zh": "例行維護時段安排在何時？"
   },
   {
     "id": "people-01",
     "department": "people",
-    "question": "How many vacation days do employees receive?"
+    "question": "How many vacation days do employees receive?",
+    "question_zh": "員工每年有幾天特休？"
   },
   {
     "id": "people-02",
     "department": "people",
-    "question": "How many unused vacation days can carry over?"
+    "question": "How many unused vacation days can carry over?",
+    "question_zh": "未使用的特休最多可遞延幾天？"
   },
   {
     "id": "people-03",
     "department": "people",
-    "question": "What is the annual education budget?"
+    "question": "What is the annual education budget?",
+    "question_zh": "每年的教育訓練預算是多少？"
   },
   {
     "id": "people-04",
     "department": "people",
-    "question": "What is the home office allowance?"
+    "question": "What is the home office allowance?",
+    "question_zh": "居家辦公補助是多少？"
   },
   {
     "id": "people-05",
     "department": "people",
-    "question": "How much parental leave is available?"
+    "question": "How much parental leave is available?",
+    "question_zh": "可申請多少育嬰假？"
   }
 ]

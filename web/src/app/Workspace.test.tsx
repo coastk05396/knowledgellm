@@ -425,3 +425,66 @@ it("retains session cost after a response without an estimate and resets on new 
   fireEvent.click(screen.getByRole("button", { name: "New chat" }));
   expect(screen.queryByText("$0.0012 est.")).not.toBeInTheDocument();
 });
+
+it("switches to Traditional Chinese and sends the language without changing access", async () => {
+  const askQuestion = vi.fn(async () => ({
+    answer: "核准預算為一百萬元。",
+    citations: [],
+  }));
+  const { unmount } = render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => [
+          {
+            id: "finance-q4",
+            title: "Q4 budget overview",
+            department: "finance",
+          },
+        ],
+        askQuestion,
+        openDocument: async () => "https://docs.example.com/source.pdf",
+      }}
+    />,
+  );
+  await screen.findByRole("button", { name: "Q4 budget overview" });
+  fireEvent.click(screen.getByRole("button", { name: "CH" }));
+  expect(document.documentElement.lang).toBe("zh-TW");
+  expect(screen.getByRole("button", { name: "CH" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "第四季預算概覽" })).toBeVisible();
+  expect(screen.getByRole("button", { name: /營運.*受限/ })).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "第四季核准的總預算是多少？" }),
+  );
+  expect(screen.getByRole("textbox", { name: "您的問題" })).toHaveValue(
+    "第四季核准的總預算是多少？",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "傳送問題" }));
+  await screen.findByText("核准預算為一百萬元。");
+  expect(askQuestion).toHaveBeenCalledWith(
+    "access",
+    "第四季核准的總預算是多少？",
+    "zh-TW",
+  );
+  unmount();
+  render(<Workspace session={null} onSwitch={async () => {}} />);
+  expect(screen.getByRole("button", { name: "CH" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(
+    screen.getByRole("button", { name: "以其他帳號登入：Alex，財務" }),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "EN" }));
+  expect(document.documentElement.lang).toBe("en");
+  expect(
+    screen.getByRole("button", {
+      name: "Sign in as another account: Alex, Finance",
+    }),
+  ).toBeVisible();
+  window.localStorage.clear();
+});

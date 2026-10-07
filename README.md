@@ -240,3 +240,21 @@ Chat telemetry is logged as structured JSON to `/aws/lambda/knowledgellm-demo-kn
 ## 📄 License
 
 Fictional educational prototype created for portfolio and technical demonstration purposes.
+
+## English / Traditional Chinese and PDF Sources
+
+Use the grouped **EN / CH** control to switch the interface and new chat answers. The preference persists in browser storage. Chinese suggested questions use the same document permissions as English; existing conversation messages retain their original language.
+
+The six fictional sources have editable Markdown originals and searchable PDF artifacts. Generate PDFs after source edits:
+
+```sh
+rtk proxy python3.12 scripts/generate-sample-pdfs.py
+```
+
+Deploy the updated ingestion package before uploading PDF artifacts to the existing `documents_bucket_name` bucket:
+
+```sh
+rtk proxy aws s3 cp api/src/knowledgellm/sample_docs/ "s3://$DOCUMENTS_BUCKET/" --recursive --exclude '*' --include '*.pdf' --content-type application/pdf
+```
+
+Keep the existing Markdown objects and version history. Verify completed index manifests for all six current PDF versions before deploying the updated chat API; source links then open authorized PDFs. PDF ingestion requires selectable text and rejects encrypted or scanned-only files. The [implementation record](docs/superpowers/plans/2026-10-07-traditional-chinese-and-pdf.md) contains validation and rollout evidence.

@@ -7,7 +7,7 @@ from typing import Literal, Protocol, cast
 
 from knowledgellm.answer_cache import AnswerCache, cache_key, demo_question_id
 from knowledgellm.authz import ALLOWED_DEPARTMENTS
-from knowledgellm.chat import (ChatAnswer, Citation, Generator, NO_SOURCES, RetrievedChunk, Retriever, Usage, VersionedRetriever,
+from knowledgellm.chat import (ChatAnswer, Citation, Generator, Language, NO_SOURCES, NO_SOURCES_ZH, RetrievedChunk, Retriever, Usage, VersionedRetriever,
                              answer_question, validate_question)
 from knowledgellm.documents import list_documents
 from knowledgellm.guardrails import Guardrails
@@ -25,7 +25,7 @@ class IndexVersions(Protocol):
 def safe_cached_answer(answer: ChatAnswer, departments: frozenset[str], guardrails: Guardrails) -> bool:
     allowed = {document.id for document in list_documents(departments)}
     return bool(
-        answer.answer.strip() and len(answer.answer) <= 6000 and answer.answer != NO_SOURCES
+        answer.answer.strip() and len(answer.answer) <= 6000 and answer.answer not in {NO_SOURCES, NO_SOURCES_ZH}
         and answer.citations and answer.guardrail_action in {"pass", "source_pii_redacted"}
         and all(citation.document_id in allowed for citation in answer.citations)
         and not guardrails.contains_pii(answer.answer) and guardrails.redact(answer.answer) == answer.answer
@@ -39,8 +39,9 @@ def answer_with_cache(
     guardrails: Guardrails,
     cache: AnswerCache | None,
     versions: IndexVersions | None,
+    language: Language = "en",
 ) -> ChatAnswer:
-    refusal = validate_question(question, departments, guardrails)
+    refusal = validate_question(question, departments, guardrails, language)
     if refusal is not None:
         return refusal
     require_time(1)
@@ -49,8 +50,8 @@ def answer_with_cache(
     start = time.perf_counter()
     snapshot = versions.current(authorized) if versions is not None else None
     timings["index_check"] = round((time.perf_counter() - start) * 1000, 3)
-    question_id = demo_question_id(question, authorized)
-    key = cache_key(question_id, authorized, snapshot.fingerprint) if question_id and snapshot and cache else None
+    question_id = demo_question_id(question, authorized, language)
+    key = cache_key(question_id, authorized, snapshot.fingerprint, language) if question_id and snapshot and cache else None
     status: Literal["miss", "bypass"] = "miss" if key else "bypass"
     if key and cache:
         start = time.perf_counter()
@@ -84,14 +85,14 @@ def answer_with_cache(
 
     class TimedGenerator:
         def generate(
-            self, query: str, chunks: Sequence[RetrievedChunk],
+            self, query: str, chunks: Sequence[RetrievedChunk], language: Language = "en",
         ) -> tuple[str, list[str], Usage | None]:
             start = time.perf_counter()
-            result = generator.generate(query, chunks)
+            result = generator.generate(query, chunks, language)
             timings["generation"] = round((time.perf_counter() - start) * 1000, 3)
             return result
 
-    result = answer_question(question, authorized, SnapshotRetriever(), TimedGenerator(), guardrails)
+    result = answer_question(question, authorized, SnapshotRetriever(), TimedGenerator(), guardrails, language)
     if versions is not None and snapshot is not None:
         start = time.perf_counter()
         if not versions.is_current(snapshot, authorized):

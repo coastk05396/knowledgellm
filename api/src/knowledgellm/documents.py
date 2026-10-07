@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 from functools import lru_cache
+from io import BytesIO
 
 MAX_DOCUMENT_BYTES = 1_000_000
 
@@ -33,12 +34,12 @@ class AuthorizationError(Exception):
 
 
 _CATALOG: tuple[tuple[str, str, str, str], ...] = (
-    ("finance-q4-budget-overview", "Q4 budget overview", "finance", "finance/q4-budget-overview.md"),
-    ("finance-expense-policy", "Expense policy", "finance", "finance/expense-policy.md"),
-    ("operations-runbook-procedures", "Runbook & procedures", "operations", "operations/runbook-procedures.md"),
-    ("operations-service-handoff", "Service handoff", "operations", "operations/service-handoff.md"),
-    ("people-employee-handbook", "Employee handbook", "people", "people/employee-handbook.md"),
-    ("people-leave-policy", "Leave policy", "people", "people/leave-policy.md"),
+    ("finance-q4-budget-overview", "Q4 budget overview", "finance", "finance/q4-budget-overview.pdf"),
+    ("finance-expense-policy", "Expense policy", "finance", "finance/expense-policy.pdf"),
+    ("operations-runbook-procedures", "Runbook & procedures", "operations", "operations/runbook-procedures.pdf"),
+    ("operations-service-handoff", "Service handoff", "operations", "operations/service-handoff.pdf"),
+    ("people-employee-handbook", "Employee handbook", "people", "people/employee-handbook.pdf"),
+    ("people-leave-policy", "Leave policy", "people", "people/leave-policy.pdf"),
 )
 
 
@@ -135,7 +136,15 @@ class S3DocumentStorage:
             body.close()
         if len(contents) > MAX_DOCUMENT_BYTES:
             raise ValueError("document exceeds the maximum supported size")
-        return contents.decode("utf-8")
+        from pypdf import PdfReader
+
+        reader = PdfReader(BytesIO(contents))
+        if reader.is_encrypted:
+            raise ValueError("encrypted PDFs are not supported")
+        text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        if not text.strip():
+            raise ValueError("PDF must contain selectable text; scanned PDFs require OCR")
+        return text
 
 
 def summary_dict(summary: DocumentSummary) -> Mapping[str, str]:

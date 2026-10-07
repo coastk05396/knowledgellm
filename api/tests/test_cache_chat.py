@@ -50,7 +50,7 @@ class Generator:
         self.citations = citations if citations is not None else ["finance-q4-budget-overview"]
         self.after = after
 
-    def generate(self, question, chunks):
+    def generate(self, question, chunks, language="en"):
         if self.after:
             self.after()
         return self.answer, self.citations, Usage(25, 10, 0.0001)
@@ -251,3 +251,34 @@ def test_route_pii_does_not_initialize_any_external_service(monkeypatch):
     result = handler.handler(chat_event("Contact alex@example.test"), object())
     assert result["statusCode"] == 200
     assert json.loads(result["body"])["guardrail_action"] == "question_pii_blocked"
+
+
+def test_chinese_cache_is_persistent_and_isolated_from_english():
+    from knowledgellm.answer_cache import demo_questions
+    from knowledgellm.cached_chat import answer_with_cache
+
+    cache = Cache()
+    versions = Versions()
+    english = ask(cache=cache, versions=versions)
+    chinese_question = demo_questions()[0]["question_zh"]
+    class ChineseGenerator:
+        def generate(self, question, chunks, language="en"):
+            assert language == "zh-TW"
+            assert question == chinese_question
+            return "第四季核准預算為 108,000 點。", ["finance-q4-budget-overview"], Usage(25, 10)
+    chinese = answer_with_cache(chinese_question, FINANCE, lambda: (Retriever(), ChineseGenerator()),
+                                BasicGuardrails(), cache, versions, "zh-TW")
+    cached = answer_with_cache(chinese_question, FINANCE, forbidden, BasicGuardrails(), cache, versions, "zh-TW")
+    assert english.cache_status == "miss"
+    assert chinese.cache_status == "miss"
+    assert cached.cache_status == "hit"
+    assert cached.answer == chinese.answer
+    assert cached.answer != english.answer
+    assert cached.usage == Usage(0, 0, 0.0)
+    assert len(cache.entries) == 2
+
+
+def test_chinese_grounding_refusal_is_never_cached():
+    from knowledgellm.chat import NO_SOURCES_ZH
+    from knowledgellm.cached_chat import safe_cached_answer
+    assert not safe_cached_answer(ChatAnswer(NO_SOURCES_ZH, (Citation("finance-q4-budget-overview", "Budget"),)), FINANCE, BasicGuardrails())

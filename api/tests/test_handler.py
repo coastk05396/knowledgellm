@@ -53,7 +53,7 @@ class FakeRetriever:
 
 @dataclass
 class FakeGenerator:
-    def generate(self, question, chunks):
+    def generate(self, question, chunks, language="en"):
         return "Vendor costs changed.", ["finance-q4-budget-overview"], Usage(30, 10, 0.0005)
 
 
@@ -146,7 +146,7 @@ def test_provider_error_does_not_echo_question_or_error(monkeypatch) -> None:
 
 def test_provider_timeout_returns_safe_retryable_error(monkeypatch) -> None:
     class SlowGenerator:
-        def generate(self, _question, _chunks):
+        def generate(self, _question, _chunks, language="en"):
             raise TimeoutError("upstream timeout with private request content")
 
     monkeypatch.setattr(handler, "create_chat_services", lambda: (FakeRetriever(), SlowGenerator()))
@@ -188,3 +188,32 @@ def test_non_access_token_claims_cannot_authorize_protected_routes(token_use) ->
 
     assert response["statusCode"] == 401
     assert json.loads(response["body"]) == {"error": "unauthenticated"}
+
+
+@pytest.mark.parametrize("language", ["zh-CN", "fr", None, 1, []])
+def test_chat_rejects_unsupported_language_before_providers(monkeypatch, language) -> None:
+    def unexpected():
+        pytest.fail("invalid language must be rejected before creating providers")
+    monkeypatch.setattr(handler, "create_chat_services", unexpected)
+    response = handler.handler({
+        "rawPath": "/chat", "body": json.dumps({"question": "What changed?", "language": language}),
+        "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}
+    }, object())
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"]) == {"error": "invalid_language"}
+
+
+def test_traditional_chinese_provider_failure_has_safe_localized_message(monkeypatch) -> None:
+    def broken():
+        raise RuntimeError("private provider data")
+    monkeypatch.setattr(handler, "create_chat_services", broken)
+    response = handler.handler({
+        "rawPath": "/chat", "body": json.dumps({"question": "預算是多少？", "language": "zh-TW"}),
+        "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}
+    }, object())
+    assert response["statusCode"] == 503
+    assert json.loads(response["body"]) == {"error": "assistant_unavailable", "message": "助理暫時無法使用，請稍後再試。"}

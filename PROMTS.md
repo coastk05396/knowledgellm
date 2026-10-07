@@ -84,3 +84,14 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 - [ ] Retain Cognito quotas and cost monitoring. Frontend-only checks are bypassable; Turnstile cannot guarantee zero bots or eliminate all request costs. Demo personas remain public.
 
 The all-AWS managed architecture in README is an undeployed reference option, not the selected low-cost demo or authorization to provision it.
+
+## Traditional Chinese and PDF Sources
+
+- Provide complete English and Traditional Chinese (`zh-TW`) interfaces, including authentication states, department names, document/citation titles, suggested questions, errors, and telemetry labels.
+- Match the résumé site's grouped `EN` / `CH` language buttons, indicate the active language accessibly, persist the selection, and update the document language. Preserve the current graphite design and responsive layout.
+- Send the selected language with chat requests; default older clients to English. Generate grounded answers and guardrail refusals in the selected language without changing department permissions.
+- Convert all six current fictional sources to text-based PDFs. Keep Markdown as the editable source, ingest PDF text, and open PDFs through authorized short-lived source links.
+- Store all six PDFs in the existing private S3 documents bucket under their existing department prefixes; retain existing Markdown objects and version history. Do not create a second documents bucket or delete runtime data.
+- Verify English/Chinese switching, persistence, desktop/mobile rendering, Chinese cited chat and refusals, PDF extraction, all six live S3 objects, authorized PDF links, and cross-department denial.
+
+Acceptance status is recorded in the [translation and PDF implementation record](docs/superpowers/plans/2026-10-07-traditional-chinese-and-pdf.md).

@@ -1,3 +1,4 @@
+import type { Language } from "./language";
 import { appConfig } from "./config";
 export type Department = "finance" | "operations" | "people";
 export interface DocumentSummary {
@@ -30,13 +31,18 @@ export interface ChatAnswer {
 }
 export interface KnowledgeApi {
   loadDocuments(token: string): Promise<DocumentSummary[]>;
-  askQuestion(token: string, question: string): Promise<ChatAnswer>;
+  askQuestion(
+    token: string,
+    question: string,
+    language?: Language,
+  ): Promise<ChatAnswer>;
   openDocument(token: string, id: string): Promise<string>;
 }
 async function request(
   path: string,
   token: string,
   question?: string,
+  language: Language = "en",
 ): Promise<unknown> {
   if (!appConfig.apiUrl) throw new Error("API unavailable");
   const response = await fetch(appConfig.apiUrl.replace(/\/$/, "") + path, {
@@ -46,7 +52,9 @@ async function request(
       Authorization: `Bearer ${token}`,
       ...(question === undefined ? {} : { "Content-Type": "application/json" }),
     },
-    ...(question === undefined ? {} : { body: JSON.stringify({ question }) }),
+    ...(question === undefined
+      ? {}
+      : { body: JSON.stringify({ question, language }) }),
   });
   if (!response.ok) throw new Error("Request unavailable");
   return response.json();
@@ -73,8 +81,8 @@ export const knowledgeApi: KnowledgeApi = {
       };
     });
   },
-  async askQuestion(token, question) {
-    const data = await request("/chat", token, question);
+  async askQuestion(token, question, language = "en") {
+    const data = await request("/chat", token, question, language);
     if (
       !isRecord(data) ||
       typeof data.answer !== "string" ||

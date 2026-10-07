@@ -192,3 +192,27 @@ def test_remote_provider_timeouts_fit_chat_request_budget(monkeypatch):
         assert calls[1]["timeout"] == 3.0
     finally:
         qdrant_client.cache_clear()
+
+
+@pytest.mark.parametrize("language, expected_instruction, refusal", [
+    ("en", "Write the answer in English.", "The available documents do not contain enough information to answer."),
+    ("zh-TW", "Traditional Chinese (Taiwan, zh-TW), never Simplified Chinese", "現有文件沒有足夠資訊可以回答此問題。"),
+])
+def test_generation_prompt_enforces_requested_language_and_grounding(language, expected_instruction, refusal) -> None:
+    from knowledgellm.providers import GroqGenerator
+    from knowledgellm.chat import RetrievedChunk
+    import json
+
+    def create(**kwargs):
+        prompt = kwargs["messages"][0]["content"]
+        assert expected_instruction in prompt
+        assert json.dumps(refusal) in prompt
+        assert "untrusted data" in prompt
+        assert kwargs["temperature"] == 0
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+            "answer": refusal, "citation_ids": []
+        })))], usage=None)
+    generator = object.__new__(GroqGenerator)
+    generator.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    generator.model = "test-model"
+    assert generator.generate("Question", [RetrievedChunk("finance-expense-policy", "Expense policy", "finance", "Source")], language) == (refusal, [], None)

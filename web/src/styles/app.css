@@ -1135,3 +1135,64 @@ h2 {
 .suggestion-buttons button:disabled {
   opacity: 0.5;
 }
+
+/* Match the resume site's EN / CH pill switch using workspace tokens. */
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.lang-option {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font:
+    600 12px/1 "IBM Plex Mono",
+    monospace;
+  padding: 6px 11px;
+  border-radius: 999px;
+  min-height: 44px;
+}
+.lang-option.is-active {
+  background: var(--gold);
+  color: var(--canvas);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  font-weight: 700;
+}
+.brand-bar .identity-picker {
+  margin-left: 0;
+}
+@media (max-width: 760px) {
+  .brand-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .brand-bar .identity-picker {
+    margin-left: -24px;
+  }
+}
+@media (max-width: 390px) {
+  .brand-bar {
+    padding-inline: 16px;
+  }
+  .brand {
+    font-size: 19px;
+    gap: 8px;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+  .lang-option {
+    padding-inline: 8px;
+  }
+  .brand-bar .identity-picker {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+}
