@@ -31,7 +31,11 @@ export function DepartmentFolders({
         <h2 id="folders-title">{t("01. Department folders")}</h2>
         <p>{t("Each folder is linked to one user")}</p>
       </div>
-      {loading && <p role="status">{t("Loading permitted documents\u2026")}</p>}
+      {loading && (
+        <p className="folder-loading" role="status">
+          {t("Loading")}
+        </p>
+      )}
       <div className="folder-list">
         {identities.map((person) => {
           const docs = documents.filter(

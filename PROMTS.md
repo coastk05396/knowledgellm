@@ -17,6 +17,7 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 
 ## Interface and Chat
 
+- Show `Loading` in English and `讀取中` in Traditional Chinese while department documents load; use a compact 32px status row with 16px spacing before the folders.
 - Keep the graphite theme, department accents, responsive desktop/sidebar and mobile/accordion layouts, keyboard focus, reduced motion, descriptive icon labels, and 44px touch targets.
 - On mobile, fit all three compact persona cards without horizontal scrolling, including the active verification label. Place the question composer and access caption above the PII guardrail/token-cost panel; use compact line spacing and room for two input lines.
 - Use the persona cards as the sign-in entry points on mobile and desktop; omit the separate initial Sign in button and Cognito username/password instruction.

@@ -23,7 +23,7 @@ const translations: Record<string, string> = {
     "選擇示範身分會啟動 Cognito 自訂驗證。您只能存取該身分獲准使用的範例文件。",
   "01. Department folders": "01. 部門資料夾",
   "Each folder is linked to one user": "每個資料夾對應一位使用者",
-  "Loading permitted documents…": "正在載入獲准存取的文件…",
+  Loading: "讀取中",
   "02. Ask KnowledgeLLM": "02. 詢問 KnowledgeLLM",
   Active: "使用中",
   "Access-scoped answers with source citations":

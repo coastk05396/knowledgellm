@@ -242,6 +242,16 @@ h2 {
   line-height: 1.6;
   color: var(--muted);
 }
+.folder-loading {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin: 0 0 16px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
 .folder-list {
   display: grid;
   gap: 18px;
