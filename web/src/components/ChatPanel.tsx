@@ -3,6 +3,8 @@ import { FileText, MessageSquare, Plus, Sparkles } from "lucide-react";
 import type { ChatAnswer, Department, DocumentSummary } from "../app/api";
 import { identities } from "./IdentityPicker";
 import demoQuestions from "../../../api/src/knowledgellm/demo_questions.json";
+import guardrailQuestions from "../data/guardrail-questions.json";
+const suggestedQuestions = [...demoQuestions, ...guardrailQuestions];
 export interface Message {
   question: string;
   response: ChatAnswer;
@@ -61,7 +63,7 @@ export function ChatPanel({
           >
             <h3>{t("Try a question")}</h3>
             <div className="suggestion-buttons">
-              {demoQuestions
+              {suggestedQuestions
                 .filter((item) => item.department === department)
                 .map(({ id, question, question_zh }) => (
                   <button
@@ -78,6 +80,11 @@ export function ChatPanel({
                   </button>
                 ))}
             </div>
+            <p className="guardrail-note">
+              {t(
+                "Extra examples use fictional personal data to demonstrate the guardrail.",
+              )}
+            </p>
           </section>
         ))}
         <div className="message-list" aria-live="polite">

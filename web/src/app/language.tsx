@@ -31,6 +31,8 @@ const translations: Record<string, string> = {
   "New chat": "新對話",
   Conversation: "對話",
   "Try a question": "試問一個問題",
+  "Extra examples use fictional personal data to demonstrate the guardrail.":
+    "額外範例使用虛構個人資料，示範個人資料防護機制。",
   "suggested questions": "建議問題",
   "KnowledgeLLM assistant": "KnowledgeLLM 助理",
   "Source:": "來源：",
