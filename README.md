@@ -1,182 +1,166 @@
 # KnowledgeLLM
 
-> **Enterprise-grade, permission-aware RAG knowledge assistant with sub-20 ms answer caching, zero-trust department isolation, and grounded citation verification.**
+Permission-aware RAG demo for Finance, Operations, and People, with grounded citations and optional answer caching.
 
-Built with **React / TypeScript / Vite** · **AWS Lambda (Python 3.12)** · **Amazon Cognito** · **Amazon DynamoDB** · **AWS Bedrock (Cohere Multilingual v3)** · **Qdrant Cloud** · **Groq Cloud LLM** · fully provisioned with **Terraform**.
+## Tech Stack
 
-```
-╔══════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║                                          RAG Pipeline                                                   ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+**Frontend:** React 19 · TypeScript · Vite · Lucide React · IBM Plex · Vitest · Testing Library
 
-  ┌────────────┐     ┌────────────────────────┐                          ┌────────────────────────────────┐     ┌───────────────┐
-  │  Question  │────►│    Embedding Model     │──[1.5, -0.4, 7.2, ...]──►│                                │     │  LLM Response │
-  └────────────┘     │  AWS Bedrock Cohere v3 │                          │  ┌──────────────────────────┐  │     └───────┬───────┘
-                     │  1 024-dim · ap-se-1   │                          │  │      System Prompt       │  │             ▲
-                     └────────────────────────┘                          │  ├──────────────────────────┤  │     ┌───────┴───────┐
-                                    │                                    │  │ ┌──────────────────────┐ │  │────►│     Model     │
-                                    │ Dense vector                       │  │ │       Chunk 1        │ │  │     │  Groq Cloud   │
-                                    ▼                                    │  │ ├──────────────────────┤ │  │     │  gpt-oss-20b  │
-                     ┌──────────────────────────┐                        │  │ │       Chunk 2        │ │  │     └───────────────┘
-                     │      Qdrant Cloud        │  ── Retrieval ──────►  │  │ ├──────────────────────┤ │  │
-                     │   Department filter      │  Top-K scoped chunks   │  │ │       Chunk 3        │ │  │
-                     └──────────────────────────┘                        │  │ └──────────────────────┘ │  │
-                                                                         │  └──────────────────────────┘  │
-                                                                         │  ┌──────────────────────────┐  │
-                                                                         │  │        Question          │  │
-                                                                         │  └──────────────────────────┘  │
-                                                                         └────────────────────────────────┘
-```
+**Backend:** Python 3.12 · boto3 · Bedrock Cohere Multilingual v3 · Qdrant Cloud · Groq (`openai/gpt-oss-20b`) · pytest
 
+**Infra:** Cognito · API Gateway · Lambda · S3 · EventBridge · DynamoDB · Parameter Store · IAM · CloudWatch · Terraform · AWS SAM
 
+## Hybrid Workflow
 
+```text
+SIGN-IN
+  React UI ⇄ Cognito ⇄ Demo-auth Lambda
+                │ access token
+                ▼
+CHAT / DOCUMENT ACCESS
+  React UI → API Gateway (JWT) → Knowledge Lambda
+                                  │
+                                  ├── Documents → Authorized S3 links → UI
+                                  │
+                                  └── Chat → Scope / PII / S3 index checks
+                                               │
+                                               ▼
+                                         DynamoDB cache
+                                          │                       │
+                                         HIT                MISS / BYPASS
+                                          │                       ▼
+                                          │     Bedrock Cohere (query vector)
+                                          │                       │
+                                          │                       ▼
+                                          │     ┌────────────────────────────────────┐
+                                          │     │ Qdrant Cloud · Chunk DB            │
+                                          │     │ Chunk 1 · Chunk 2 · Chunk 3        │
+                                          │     │ Text + vector + source metadata    │
+                                          │     │ Department / version filters       │
+                                          │     └─────────────────┬──────────────────┘
+                                          │                       │ matching chunks
+                                          │                       ▼
+                                          │                 Groq → Validation
+                                          │                       ├── Eligible write → DynamoDB
+                                          ▼                       ▼
+                                        Answer + citations → UI
 
----
+INGESTION
+  S3 upload → EventBridge → Ingestion Lambda → Bedrock Cohere
+                                  ▲                  │ vectors
+                                  │ read version     ▼
+                                  S3 ◄── Manifest ── Qdrant Chunk DB
 
-### 2 · All-AWS Managed Enterprise Reference
-
-For enterprise environments requiring centralised compliance, sovereign data boundaries, and pure AWS-native operations:
-
-![KnowledgeLLM All-AWS Managed Reference Architecture](docs/design/architecture/knowledgellm-all-aws-architecture.webp)
-
-```
-  ┌────────────────┐    ┌─────────────────────┐    ┌──────────────────────────────────────┐
-  │  Route 53 DNS  │───►│  Amplify Hosting     │───►│  Amazon Cognito  (SSO / RBAC)        │
-  └────────────────┘    └─────────────────────┘    └──────────────────────────────────────┘
-                                                                     │
-                         ┌───────────────────────────────────────────▼──────────────────────────────────┐
-                         │                     Amazon Bedrock Knowledge Bases                            │
-                         │                                                                               │
-                         │  ┌─────────────────────────────┐    ┌────────────────────────────────────┐  │
-                         │  │  Titan Embeddings V2         │    │  OpenSearch Serverless (AOSS)       │  │
-                         │  │  Managed vector generation   │    │  Scalable vector + keyword index    │  │
-                         │  └──────────────┬──────────────┘    └──────────────────┬─────────────────┘  │
-                         │                 └────────────────────────┬─────────────┘                     │
-                         │                                          │  Retrieval                         │
-                         │                         ┌───────────────▼───────────────┐                   │
-                         │                         │  Nova Pro Inference            │                   │
-                         │                         │  Bedrock Guardrails            │                   │
-                         │                         │  PII masking · content filter  │                   │
-                         │                         └───────────────┬───────────────┘                   │
-                         └─────────────────────────────────────────┼───────────────────────────────────┘
-                                                                    │
-                         ┌──────────────────────────────────────────▼──────────────────────────────────┐
-                         │  Step Functions — Ingestion Orchestration                                     │
-                         │  S3 upload → EventBridge → Embedding → AOSS upsert → Completion manifest     │
-                         └─────────────────────────────────────────────────────────────────────────────┘
+SUPPORTING SERVICES
+  Lambdas → Parameter Store (keys) / CloudWatch (logs)
+  IAM → Scoped permissions · Terraform / SAM → AWS resources
 ```
 
----
+Cache: exactly 15 suggested questions, 24-hour TTL, disabled by default. Custom questions bypass caching; source-version changes invalidate earlier entries. [Operations guide](docs/cohere-demo-cache-operations.md).
 
-## 🍱 Architecture Bento Box
+## All-AWS Reference
 
-| Layer | Component | Tech Stack | Role & Key Metrics |
-|---|---|---|---|
-| **01 · Identity** | Custom Demo Auth | **Amazon Cognito User Pool** | Passwordless 1-click persona switching (`finance`, `operations`, `people`) |
-| **02 · Gateway** | HTTP API Gateway | **API Gateway v2** | Server-side JWT signature & claims verification, low-latency routing |
-| **03 · Fast Path** | Answer Cache | **Amazon DynamoDB** | **~15 ms latency**, 0 Groq tokens, 24 h TTL for 15 hot demo questions |
-| **04 · Embeddings** | Managed Embeddings | **AWS Bedrock Cohere v3** | **1 024-dim**, Singapore local (`ap-southeast-1`), eliminates 15 s cold starts |
-| **05 · Vector DB** | Isolated Retrieval | **Qdrant Cloud** | Metadata-filtered vector search strictly bounded by authorised department |
-| **06 · Inference** | Grounded LLM | **Groq Cloud (`gpt-oss-20b`)** | Temperature=0, rigid JSON output schema, mandatory citation enforcement |
-| **07 · Ingestion** | Event-Driven Pipeline | **Amazon S3 + EventBridge** | Prefix-filtered triggers (`finance/`, etc.) with immutable completion manifests |
-| **08 · IaC** | Cloud Automation | **Terraform & AWS SAM** | Multi-resource orchestration with S3 remote state and automated packaging |
+Proposed architecture · not deployed.
 
----
+**Frontend:** React · TypeScript · Vite
 
-## 🔐 Security & Multi-Tenancy
+**Backend:** Python 3.12 Lambda · Bedrock Knowledge Bases · Titan Embeddings V2 · Nova Pro · Bedrock Guardrails · OpenSearch Serverless
 
-### Server-Enforced RBAC
+**Infra:** Route 53 · Amplify Hosting · Cognito · API Gateway · S3 · EventBridge · Step Functions · IAM · KMS · CloudWatch · X-Ray · CloudTrail
 
+```text
+FRONTEND / SIGN-IN
+  Route 53 → Amplify Hosting → React UI ⇄ Cognito
+                                  │ access token
+                                  ▼
+CHAT
+  API Gateway (JWT) → Lambda (department scope)
+                          │
+                          ▼
+                 Bedrock Knowledge Bases
+                          │
+                          ▼
+                 Titan V2 (query vector)
+                          │
+                          ▼
+        ┌────────────────────────────────────┐
+        │ OpenSearch Serverless · Chunk DB   │
+        │ Chunk 1 · Chunk 2 · Chunk 3        │
+        │ Text + vector + source metadata    │
+        │ Department filters                 │
+        └─────────────────┬──────────────────┘
+                          │ matching chunks
+                          ▼
+  Input / source Guardrails → Nova Pro → Output Guardrails
+                                             │
+                                             ▼
+                              Lambda citation checks → UI
+
+INGESTION
+  S3 → EventBridge → Step Functions + Lambda
+                              │
+                              ▼
+                  Knowledge Bases ingestion → Titan V2
+                                                 │ vectors
+                                                 ▼
+                                  OpenSearch Chunk DB
+
+SUPPORTING SERVICES
+  IAM / KMS → Access / encryption
+  CloudWatch / X-Ray / CloudTrail → Logs / traces / audit
 ```
-  Cognito JWT
-      │
-      ▼
-  ┌────────────────────────────────────────────────────────────┐
-  │  Orchestrator Lambda                                        │
-  │                                                            │
-  │  1. Verify JWT signature (API Gateway — mandatory)         │
-  │  2. Extract group claims  →  dept ∈ {finance, ops, people} │
-  │  3. Pass dept to all downstream calls                      │
-  └────────────────────────┬───────────────────────────────────┘
-                           │
-           ┌───────────────┼───────────────┐
-           ▼               ▼               ▼
-      Qdrant filter    Citation guard   PII guardrail
-      (retrieval)      (validation)     (input+output)
-```
 
-```python
-# Qdrant retrieval — strictly bounded by authorised department claims
-models.Filter(
-    must=[models.FieldCondition(key="department", match=models.MatchValue(value=dept))]
-)
-```
+## Security & Telemetry
 
-### Anti-Hallucination Citation Verification
+Cognito groups enforce department access; the backend checks citations, blocks common PII patterns, and masks source PII. CloudWatch records latency, token counts, cache status, and guardrail outcomes without raw content or authentication tokens.
 
-The LLM is constrained by system prompts to answer strictly from supplied context excerpts. The backend parses returned citation IDs and checks them against permitted S3 document IDs — if citations are missing, mismatched, or out-of-scope the request **fails closed**.
+## Quickstart
 
-### Defense-in-Depth PII Guardrails
-
-Regex-based guardrails sanitise user input questions **and** model output answers for sensitive personal data (email, phone, SSN).
-
----
-
-## 🚀 Quickstart & Local Development
-
-### Prerequisites
-
-- Node.js 20+ / npm
-- Python 3.12
-- AWS CLI configured with active credentials
+Requires Node.js 20.19+ or 22.12+, Python 3.12, and configured AWS credentials.
 
 ### 1 · Web App
 
+From `web/`, configure `.env.local` with public API/Cognito values.
+
 ```sh
-cd web
-npm install
-npm run dev      # Local Vite dev server → http://localhost:5173
-npm test         # Run 45 Vitest unit & integration tests
-npm run build    # Type-checked production bundle
+rtk proxy cp .env.example .env.local
+rtk npm ci
+rtk npm run dev      # http://localhost:5173
+rtk npm test
+rtk npm run build
 ```
+
+Optional public preview with [cloudflared](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/): keep Vite running and use a second terminal.
+
+```sh
+rtk proxy cloudflared tunnel --url http://localhost:5173 --http-host-header localhost:5173
+```
+
+Open the printed HTTPS URL; Ctrl+C stops the tunnel. For API calls, add that URL's origin to API Gateway CORS (`web_origin`).
 
 ### 2 · Backend API
 
+From `api/`:
+
 ```sh
-cd api
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-pytest           # Run backend test suite
+rtk proxy python3.12 -m venv .venv
+rtk proxy .venv/bin/python -m pip install -e '.[dev]'
+rtk proxy .venv/bin/python -m pytest
 ```
 
 ### 3 · Deploy Infrastructure (Terraform)
 
-```sh
-# 1. Package Lambda artifacts (Linux x86_64 compatible)
-bash scripts/package-lambdas.sh
+From the repository root, configure `terraform.tfvars`, the S3 state backend, and backend provider secrets before deployment.
 
-# 2. Deploy AWS Infrastructure
-cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform apply
+```sh
+rtk proxy bash scripts/package-lambdas.sh
+rtk proxy cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+# Fill in terraform.tfvars before initialization and review the plan.
+rtk proxy terraform -chdir=infra/terraform init
+rtk proxy terraform -chdir=infra/terraform plan -out=tfplan
+rtk proxy terraform -chdir=infra/terraform apply tfplan
 ```
 
----
+## License
 
-## 📊 Telemetry & CloudWatch Observability
-
-Chat telemetry is logged as structured JSON to `/aws/lambda/knowledgellm-demo-knowledge`:
-
-| Signal | Fields |
-|--------|--------|
-| **Latency & Tokens** | Request duration (ms), input / output token counts, estimated inference cost |
-| **Guardrail Outcomes** | `pass` · `question_pii_blocked` · `source_pii_redacted` |
-| **Cache Metrics** | Real-time DynamoDB hit / miss logging for performance verification |
-
----
-
-## 📄 License
-
-Fictional educational prototype created for portfolio and technical demonstration purposes.
+Fictional educational prototype for portfolio and technical demonstration purposes.
