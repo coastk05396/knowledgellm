@@ -130,6 +130,14 @@ rtk npm test
 rtk npm run build
 ```
 
+Optional public preview with [cloudflared](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/): keep Vite running and use a second terminal.
+
+```sh
+rtk proxy cloudflared tunnel --url http://localhost:5173 --http-host-header localhost:5173
+```
+
+Open the printed HTTPS URL; Ctrl+C stops the tunnel. For API calls, add that URL's origin to API Gateway CORS (`web_origin`).
+
 ### 2 · Backend API
 
 From `api/`:
