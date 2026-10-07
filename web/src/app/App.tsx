@@ -1,4 +1,10 @@
-import { useEffect, useState } from "react";
+import {
+  LanguageBoundary,
+  LanguageProvider,
+  LanguageSwitch,
+  useLanguage,
+} from "./language";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
@@ -19,13 +25,14 @@ interface WorkspaceProps {
   authLoading?: boolean;
   authError?: string | null;
 }
-export function Workspace({
+function WorkspaceContent({
   session,
   onSwitch,
   api = knowledgeApi,
   authLoading = false,
   authError = null,
 }: WorkspaceProps) {
+  const { t, language } = useLanguage();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [loading, setLoading] = useState(Boolean(session));
   const [error, setError] = useState<string | null>(null);
@@ -36,49 +43,61 @@ export function Workspace({
     null,
   );
   const [cost, setCost] = useState<number | null>(null);
+  const documentGeneration = useRef(0);
+  const pendingSourceWindows = useRef(new Set<Window>());
   useEffect(() => {
-    let active = true;
-    setDocuments([]);
     setSuggestion(null);
     setMessages([]);
     setChatFailed(false);
     setCost(null);
     setError(null);
+  }, [session, api]);
+  useEffect(() => {
+    const generation = ++documentGeneration.current;
+    let active = true;
+    setDocuments([]);
+    setError(null);
+    const invalidate = () => {
+      active = false;
+      documentGeneration.current++;
+      pendingSourceWindows.current.forEach((source) => source.close());
+      pendingSourceWindows.current.clear();
+    };
     if (!session) {
       setLoading(false);
-      return;
+      return invalidate;
     }
     setLoading(true);
     api
-      .loadDocuments(session.accessToken)
+      .loadDocuments(session.accessToken, language)
       .then((docs) => {
-        if (active) setDocuments(docs);
+        if (active && generation === documentGeneration.current)
+          setDocuments(docs);
       })
       .catch(() => {
-        if (active)
+        if (active && generation === documentGeneration.current)
           setError(
             "Documents are unavailable. Please check your connection and sign in again.",
           );
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && generation === documentGeneration.current)
+          setLoading(false);
       });
-    return () => {
-      active = false;
-    };
-  }, [session, api]);
+    return invalidate;
+  }, [session, api, language]);
   const departments = identities
     .filter((person) =>
       documents.some((doc) => doc.department === person.department),
     )
     .map((person) => person.department);
-  const name = session?.name ?? "Guest";
+  const name = t(session?.name ?? "Guest");
   const access = identities
     .filter((person) => departments.includes(person.department))
-    .map((person) => person.label)
+    .map((person) => t(person.label))
     .join(" & ");
   const openDocument = async (id: string) => {
-    if (!session || !documents.some((doc) => doc.id === id)) {
+    if (!session || loading || !documents.some((doc) => doc.id === id)) {
       setError("This source is not available to your account.");
       return;
     }
@@ -90,14 +109,20 @@ export function Workspace({
       return;
     }
     sourceWindow.opener = null;
+    const generation = documentGeneration.current;
+    pendingSourceWindows.current.add(sourceWindow);
     try {
-      const url = await api.openDocument(session.accessToken, id);
+      const url = await api.openDocument(session.accessToken, id, language);
+      if (generation !== documentGeneration.current) return;
       if (new URL(url).protocol !== "https:")
         throw new Error("Invalid source URL");
       sourceWindow.location.replace(url);
     } catch {
       sourceWindow.close();
-      setError("The source could not be opened. Please try again.");
+      if (generation === documentGeneration.current)
+        setError("The source could not be opened. Please try again.");
+    } finally {
+      pendingSourceWindows.current.delete(sourceWindow);
     }
   };
   const send = async (question: string) => {
@@ -106,7 +131,11 @@ export function Workspace({
     setChatFailed(false);
     setError(null);
     try {
-      const response = await api.askQuestion(session.accessToken, question);
+      const response = await api.askQuestion(
+        session.accessToken,
+        question,
+        language,
+      );
       if (
         response.citations.some(
           (citation) =>
@@ -132,6 +161,9 @@ export function Workspace({
     }
   };
   const switchAccount = (department?: string) => {
+    documentGeneration.current++;
+    pendingSourceWindows.current.forEach((source) => source.close());
+    pendingSourceWindows.current.clear();
     setDocuments([]);
     setSuggestion(null);
     setMessages([]);
@@ -143,12 +175,13 @@ export function Workspace({
   return (
     <div className="workspace">
       <header className="brand-bar">
-        <a className="brand" href="/" aria-label="KnowledgeLLM home">
+        <a className="brand" href="/" aria-label={t("KnowledgeLLM home")}>
           <span className="brand-mark">
             <Terminal />
           </span>
           <span>KnowledgeLLM</span>
         </a>
+        <LanguageSwitch />
         <IdentityPicker
           departments={departments}
           onSwitch={switchAccount}
@@ -175,6 +208,7 @@ export function Workspace({
       </aside>
       <main className="chat-area">
         <ChatPanel
+          documents={documents}
           name={name}
           departments={departments}
           signedIn={Boolean(session)}
@@ -195,14 +229,17 @@ export function Workspace({
         <div className="workspace-notices">
           {(error || authError) && (
             <p role="alert" className="error-message">
-              {error || authError}
+              {t(error || authError || "")}
             </p>
           )}
-          {authLoading && <p role="status">Connecting to your account…</p>}
+          {authLoading && (
+            <p role="status">{t("Connecting to your account…")}</p>
+          )}
           {session && !loading && !documents.length && !error && (
             <p role="status">
-              Your account has no document access. Contact your workspace
-              administrator.
+              {t(
+                "Your account has no document access. Contact your workspace administrator.",
+              )}
             </p>
           )}
         </div>
@@ -225,6 +262,13 @@ export function Workspace({
         </div>
       </main>
     </div>
+  );
+}
+export function Workspace(props: WorkspaceProps) {
+  return (
+    <LanguageBoundary>
+      <WorkspaceContent {...props} />
+    </LanguageBoundary>
   );
 }
 function ConnectedApp() {
@@ -260,8 +304,10 @@ function ConnectedApp() {
 }
 export default function App() {
   return (
-    <AuthProvider>
-      <ConnectedApp />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <ConnectedApp />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

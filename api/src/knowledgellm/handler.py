@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from functools import lru_cache
 
 from knowledgellm.authz import departments_for_claims
-from knowledgellm.chat import Generator, Retriever, validate_question
+from knowledgellm.chat import Generator, Language, Retriever, validate_question
 from knowledgellm.answer_cache import create_answer_cache
 from knowledgellm.cached_chat import answer_with_cache
 from knowledgellm.index_versions import S3IndexVersions
@@ -44,18 +44,17 @@ def create_index_versions() -> S3IndexVersions | None:
     return S3IndexVersions(bucket) if bucket else None
 
 
-def _question_from_event(event: Mapping[str, object]) -> str | None:
+def _chat_payload(event: Mapping[str, object]) -> dict[str, object]:
     body = event.get("body")
     if not isinstance(body, str):
-        return None
+        return {}
     try:
         if event.get("isBase64Encoded") is True:
             body = base64.b64decode(body, validate=True).decode("utf-8")
         payload = json.loads(body)
     except (ValueError, UnicodeDecodeError):
-        return None
-    question = payload.get("question") if isinstance(payload, dict) else None
-    return question if isinstance(question, str) else None
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def handler(event: dict[str, object], context: object) -> dict[str, object]:
@@ -80,8 +79,15 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         return _response(401, {"error": "unauthenticated"})
 
     departments = departments_for_claims(claims)
+    document_language: Language = "en"
+    if method == "GET" and isinstance(path, str) and (path == "/documents" or path.startswith("/documents/")):
+        query = event.get("queryStringParameters")
+        requested_language = query.get("language", "en") if isinstance(query, dict) else "en"
+        if requested_language not in ("en", "zh-TW"):
+            return _response(400, {"error": "invalid_language"})
+        document_language = "zh-TW" if requested_language == "zh-TW" else "en"
     if path == "/documents" and method == "GET":
-        return _response(200, {"documents": [summary_dict(doc) for doc in list_documents(departments)]})
+        return _response(200, {"documents": [summary_dict(doc) for doc in list_documents(departments, document_language)]})
 
     if isinstance(path, str) and path.startswith("/documents/") and method == "GET":
         path_parameters = event.get("pathParameters")
@@ -92,7 +98,7 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         if not bucket:
             return _response(503, {"error": "storage_unavailable"})
         try:
-            link = open_document(document_id, departments, S3DocumentStorage(bucket))
+            link = open_document(document_id, departments, S3DocumentStorage(bucket), document_language)
         except AuthorizationError:
             return _response(404, {"error": "not_found"})
         except Exception:
@@ -105,15 +111,20 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
             request_id = request_context.get("requestId")
         request_id = request_id if isinstance(request_id, str) else "unknown"
         department = ",".join(sorted(departments))
-        question = _question_from_event(event)
-        if question is None:
+        payload = _chat_payload(event)
+        requested_language = payload.get("language", "en")
+        if requested_language not in ("en", "zh-TW"):
+            return _response(400, {"error": "invalid_language"})
+        language: Language = "zh-TW" if requested_language == "zh-TW" else "en"
+        question = payload.get("question")
+        if not isinstance(question, str):
             _log_chat_telemetry(
                 request_id, department, started_at, status="invalid_question", guardrail_action="invalid_question"
             )
-            return _response(400, {"error": "invalid_question"})
+            return _response(400, {"error": "invalid_question", **({"message": "請輸入有效的問題。"} if language == "zh-TW" else {})})
         try:
             guardrails = BasicGuardrails()
-            result = validate_question(question, departments, guardrails)
+            result = validate_question(question, departments, guardrails, language)
             if result is None:
                 remaining = getattr(context, "get_remaining_time_in_millis", None)
                 seconds = remaining() / 1000 - 2 if callable(remaining) else 25
@@ -124,12 +135,12 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
                         logger.info("answer_cache_unavailable operation=initialize")
                         cache = None
                     result = answer_with_cache(question, departments, create_chat_services,
-                                               guardrails, cache, create_index_versions())
+                                               guardrails, cache, create_index_versions(), language)
         except Exception:
             _log_chat_telemetry(
                 request_id, department, started_at, status="assistant_unavailable", guardrail_action="error"
             )
-            return _response(503, {"error": "assistant_unavailable"})
+            return _response(503, {"error": "assistant_unavailable", **({"message": "助理暫時無法使用，請稍後再試。"} if language == "zh-TW" else {})})
         usage = None
         cost = None
         if result.usage is not None:

@@ -1,3 +1,4 @@
+import { useLanguage } from "../app/language";
 import { useEffect, useState } from "react";
 import {
   ChevronDown,
@@ -17,6 +18,7 @@ export function DepartmentFolders({
   onOpen: (id: string) => void;
   loading: boolean;
 }) {
+  const { t } = useLanguage();
   const [closed, setClosed] = useState<string[]>([]);
 
   useEffect(() => {
@@ -26,10 +28,25 @@ export function DepartmentFolders({
   return (
     <section className="folders" aria-labelledby="folders-title">
       <div className="folder-heading">
-        <h2 id="folders-title">01. Department folders</h2>
-        <p>Each folder is linked to one user</p>
+        <h2 id="folders-title">{t("01. Department folders")}</h2>
+        <p>{t("Each folder is linked to one user")}</p>
       </div>
-      {loading && <p role="status">Loading permitted documents…</p>}
+      {loading && (
+        <p
+          className="folder-loading"
+          role="status"
+          aria-label={`${t("Loading")}...`}
+        >
+          <span aria-hidden="true">
+            {t("Loading")}
+            <span className="thinking-dots">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </span>
+        </p>
+      )}
       <div className="folder-list">
         {identities.map((person) => {
           const docs = documents.filter(
@@ -45,7 +62,7 @@ export function DepartmentFolders({
               <button
                 className="folder-button"
                 disabled={!permitted}
-                aria-label={`${person.label} / ${person.name}${permitted ? "" : " — restricted"}`}
+                aria-label={`${t(person.label)} / ${person.name}${permitted ? "" : ` — ${t("restricted")}`}`}
                 aria-expanded={expanded}
                 aria-controls={`files-${person.department}`}
                 onClick={() =>
@@ -58,7 +75,7 @@ export function DepartmentFolders({
               >
                 <Folder />
                 <strong>
-                  {person.label} / {person.name}
+                  {t(person.label)} / {person.name}
                 </strong>
                 <span className="folder-count">
                   {permitted ? docs.length : <LockKeyhole size={16} />}
@@ -81,7 +98,7 @@ export function DepartmentFolders({
                     onClick={() => onOpen(doc.id)}
                   >
                     <FileText size={19} />
-                    <span>{doc.title}</span>
+                    <span>{t(doc.title)}</span>
                   </button>
                 ))}
               </div>

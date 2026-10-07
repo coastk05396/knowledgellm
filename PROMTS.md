@@ -17,13 +17,14 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 
 ## Interface and Chat
 
+- Show `Loading...` in English and `讀取中...` in Traditional Chinese while department documents load; animate the three trailing dots in sequence while keeping a stable accessible status label, and disable animation for reduced motion. Use a compact 32px status row with 16px spacing before the folders.
 - Keep the graphite theme, department accents, responsive desktop/sidebar and mobile/accordion layouts, keyboard focus, reduced motion, descriptive icon labels, and 44px touch targets.
 - On mobile, fit all three compact persona cards without horizontal scrolling, including the active verification label. Place the question composer and access caption above the PII guardrail/token-cost panel; use compact line spacing and room for two input lines.
 - Use the persona cards as the sign-in entry points on mobile and desktop; omit the separate initial Sign in button and Cognito username/password instruction.
 - On mobile, keep the verification dot inline with the centered first line of its label, and give the Department Folders heading 20px of space above it.
 - While an answer is pending, animate the source-checking star and trailing dots on desktop and mobile. Keep a stable accessible status message and disable animation when reduced motion is requested.
 - After authentication and successful authorized document listing, show a small green `AWS Cognito Verified` line under the active name and a success toast. Remove its folder lock, display its document count, and expand its files. Keep other folders locked; clear verification on switching or listing failure.
-- Provide five document-based question buttons per authorized department instead of the identity introduction and permission badges. Clicking fills and focuses the composer without submitting; disable during pending requests and clear on switching or New chat.
+- Provide five document-based question buttons and two guardrail demonstration questions per authorized department instead of the identity introduction and permission badges. Include English and Traditional Chinese versions of every question. Guardrail examples contain clearly fictional email addresses or phone numbers and must trigger question PII blocking before retrieval or generation; label their fictional/demo purpose. Keep these examples outside the original 15-question persistent cache catalog. Clicking fills and focuses the composer without submitting; disable during pending requests and clear on switching or New chat.
 - Open documents and citations through authorized, short-lived S3 links. Preserve the conversation when opening a source.
 - Answer only from authorized supporting documents. If evidence is insufficient, state that the available documents do not contain enough information; do not invent facts or citations.
 - Preserve conversation on provider errors and show a retryable unavailable state without leaking protected text.
@@ -42,7 +43,7 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 ## Cohere Migration and Fixed Demo Answer Cache
 
 - Share one JSON catalog of exactly 15 stable-ID suggested questions (five each for Finance, Operations, People). Match only exact text after trimming leading/trailing whitespace; preserve case and internal whitespace. Custom questions use normal retrieval/generation and never store answers.
-- Reindex the six approved S3 document versions into the separate `knowledgellm-cohere-v3` Qdrant collection; never mix embedding dimensions/models or delete the old collection during migration. Reuse Bedrock, Qdrant, and Groq service clients.
+- Reindex the twelve approved English/Traditional Chinese S3 Markdown document versions into the separate `knowledgellm-cohere-v3` Qdrant collection; never mix embedding dimensions/models or delete the old collection during migration. Reuse Bedrock, Qdrant, and Groq service clients.
 - Use one encrypted DynamoDB on-demand table (`pk` string, TTL attribute `expires_at`) for cross-Lambda answer sharing. Cache items expire after 86,400 seconds; check expiry at read time because TTL deletion is asynchronous. Enable with `ANSWER_CACHE_ENABLED=true` only after migration verification; default is disabled. No Redis, embedding cache, or container migration.
 - Validate verified login, full authorized department scope, and question PII before any cache read. Key includes fixed question ID/text, full scope, indexed document-version fingerprint, embedding/generation models, collection, prompt version, and guardrail version.
 - Store only successful grounded answers with valid authorized citations and passed or safely masked PII outcomes. Never store tokens, presigned links, errors, refusals, or answers without valid sources. Recheck output PII and citation permission on hits.
@@ -84,3 +85,16 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 - [ ] Retain Cognito quotas and cost monitoring. Frontend-only checks are bypassable; Turnstile cannot guarantee zero bots or eliminate all request costs. Demo personas remain public.
 
 The all-AWS managed architecture in README is an undeployed reference option, not the selected low-cost demo or authorization to provision it.
+
+## Traditional Chinese and Markdown Sources
+
+- Provide complete English and Traditional Chinese (`zh-TW`) interfaces, including authentication states, department names, document/citation titles, suggested questions, errors, and telemetry labels.
+- Match the résumé site's grouped `EN` / `CH` language buttons, indicate the active language accessibly, persist the selection, and update the document language. Preserve the current graphite design and responsive layout.
+- Maintain six complete Traditional Chinese translations beside the six original English Markdown sources. Use `-ch.md` filenames, such as `finance/expense-policy-ch.md`, preserving every fact, number, rule, and fictional-data notice.
+- Store all twelve Markdown sources in the existing private S3 documents bucket under the existing department prefixes. Do not use PDF artifacts for ingestion or source links. Previously uploaded PDF objects may remain as unused history; do not delete runtime objects without an explicit cleanup instruction.
+- Send the selected language with document-list, document-open, and chat requests; default older clients to English. Chinese listings, folder source links and citation links must open the matching `-ch.md`; English opens the original `.md`.
+- Use language-specific immutable source-version snapshots for retrieval and answer caching, retaining stable logical document IDs, verified department permissions, and safe unavailable behavior for incomplete indexes. Generate grounded answers and guardrail refusals in the selected language.
+- Switching languages refreshes document listing, prevents stale responses or URLs from opening the wrong variant, and preserves conversation messages.
+- Verify all twelve live S3 Markdown objects and source contents, both-language authorized source/citation links, cross-department denial, responsive persisted toggle behavior, bilingual index isolation and Chinese cited chat/refusals.
+
+Acceptance status is recorded in the [Markdown correction record](docs/superpowers/plans/2026-10-07-traditional-chinese-markdown.md). This supersedes the earlier PDF interpretation.

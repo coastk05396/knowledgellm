@@ -1,3 +1,4 @@
+import type { Language } from "./language";
 import { appConfig } from "./config";
 export type Department = "finance" | "operations" | "people";
 export interface DocumentSummary {
@@ -29,14 +30,19 @@ export interface ChatAnswer {
   cache_status?: "hit" | "miss" | "bypass";
 }
 export interface KnowledgeApi {
-  loadDocuments(token: string): Promise<DocumentSummary[]>;
-  askQuestion(token: string, question: string): Promise<ChatAnswer>;
-  openDocument(token: string, id: string): Promise<string>;
+  loadDocuments(token: string, language?: Language): Promise<DocumentSummary[]>;
+  askQuestion(
+    token: string,
+    question: string,
+    language?: Language,
+  ): Promise<ChatAnswer>;
+  openDocument(token: string, id: string, language?: Language): Promise<string>;
 }
 async function request(
   path: string,
   token: string,
   question?: string,
+  language: Language = "en",
 ): Promise<unknown> {
   if (!appConfig.apiUrl) throw new Error("API unavailable");
   const response = await fetch(appConfig.apiUrl.replace(/\/$/, "") + path, {
@@ -46,7 +52,9 @@ async function request(
       Authorization: `Bearer ${token}`,
       ...(question === undefined ? {} : { "Content-Type": "application/json" }),
     },
-    ...(question === undefined ? {} : { body: JSON.stringify({ question }) }),
+    ...(question === undefined
+      ? {}
+      : { body: JSON.stringify({ question, language }) }),
   });
   if (!response.ok) throw new Error("Request unavailable");
   return response.json();
@@ -54,8 +62,8 @@ async function request(
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === "object");
 export const knowledgeApi: KnowledgeApi = {
-  async loadDocuments(token) {
-    const data = await request("/documents", token);
+  async loadDocuments(token, language = "en") {
+    const data = await request(`/documents?language=${language}`, token);
     if (!isRecord(data) || !Array.isArray(data.documents))
       throw new Error("Invalid documents");
     return data.documents.map((doc: unknown) => {
@@ -73,8 +81,8 @@ export const knowledgeApi: KnowledgeApi = {
       };
     });
   },
-  async askQuestion(token, question) {
-    const data = await request("/chat", token, question);
+  async askQuestion(token, question, language = "en") {
+    const data = await request("/chat", token, question, language);
     if (
       !isRecord(data) ||
       typeof data.answer !== "string" ||
@@ -107,8 +115,11 @@ export const knowledgeApi: KnowledgeApi = {
         : {}),
     };
   },
-  async openDocument(token, id) {
-    const data = await request("/documents/" + encodeURIComponent(id), token);
+  async openDocument(token, id, language = "en") {
+    const data = await request(
+      `/documents/${encodeURIComponent(id)}?language=${language}`,
+      token,
+    );
     if (
       !isRecord(data) ||
       !isRecord(data.document) ||

@@ -24,7 +24,7 @@ class FakeGenerator:
     answer: str = "Vendor costs changed."
 
     def generate(
-        self, question: str, chunks: list[RetrievedChunk]
+        self, question: str, chunks: list[RetrievedChunk], language="en"
     ) -> tuple[str, list[str], Usage | None]:
         self.calls += 1
         self.received_departments = [chunk.department for chunk in chunks]
@@ -118,3 +118,26 @@ def test_uncited_or_unknown_document_ids_are_not_returned_as_answers() -> None:
 
     assert answer.answer == "The available documents do not contain enough information to answer."
     assert answer.citations == ()
+
+
+def test_traditional_chinese_no_sources_and_pii_refusals() -> None:
+    from knowledgellm.chat import NO_SOURCES_ZH
+
+    generator = FakeGenerator(citations=[])
+    answer = answer_question("What changed?", frozenset({"finance"}), FakeRetriever([]), generator, BasicGuardrails(), "zh-TW")
+    assert answer.answer == NO_SOURCES_ZH
+    answer = answer_question("alex@example.test", frozenset({"finance"}), FakeRetriever([]), generator, BasicGuardrails(), "zh-TW")
+    assert answer.answer == "為保護隱私，請移除問題中的個人資料後再試一次。"
+    assert generator.calls == 0
+
+
+def test_chat_forwards_requested_language_to_generation() -> None:
+    class ChineseGenerator:
+        def generate(self, question, chunks, language="en"):
+            assert language == "zh-TW"
+            return "供應商費用已變更。", ["finance-q4-budget-overview"], None
+
+    result = answer_question("What changed?", frozenset({"finance"}), FakeRetriever([
+        RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", "Vendor costs changed.")
+    ]), ChineseGenerator(), BasicGuardrails(), "zh-TW")
+    assert result.answer == "供應商費用已變更。"

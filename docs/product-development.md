@@ -32,3 +32,19 @@ Independent review: the read-only reviewer approved the source change after rere
 Delivery: implementation commit `2c660cc` has a locally verified SSH signature and was pushed in PR #15 targeting `main`. The original UI worktree stayed clean and on its existing branch. Generated packages, Terraform initialization files, and credentials are excluded from Git.
 
 No AWS deployment, index migration, cache enabling, or live Bedrock/Qdrant/Groq calls occurred. All 15 live retrieval/grounding checks, invocation metrics, a second Lambda environment, and actual latency measurements remain pending approved rollout. The remote plan includes rebuilt standalone auth ZIP metadata; authentication source/behavior is unchanged. See [migration operations](cohere-demo-cache-operations.md) for the gated rollout and rollback procedure.
+
+## Traditional Chinese Markdown Correction
+
+The user clarified that the sources must be translated Markdown (`-ch.md`), not PDFs. Backend owns translations, Markdown storage/catalog, language-specific index versions, migration tooling and tests. Frontend owns language-aware listing/source requests and stale-response protection. Coordinator owns requirements, live S3 upload, deployment, integrated browser verification and PR updates. The existing EN/CH interface stays in place.
+
+Markdown correction is implemented and deployed: all twelve real S3 source downloads, language selection, inline UTF-8 display, and department isolation are verified. Backend 167 tests and frontend 52 tests pass; production build passes. Local and Cloudflare Chrome checks confirm Sam opens actual Chinese -ch.md in CH and original English .md in EN. Bedrock remains NOT_AUTHORIZED; indexing and grounded chat remain unverified. See the [correction record](superpowers/plans/2026-10-07-traditional-chinese-markdown.md).
+
+## Bilingual Guardrail Suggestions
+
+Scope: add two fictional PII demonstration questions per department in English and Traditional Chinese alongside the existing five document questions. Preserve existing click-to-fill, focus, busy-state, department authorization and the original 15-question cache catalog. No changes to guardrail rules or AWS deployment are needed.
+
+Ownership: frontend builder owns frontend data, rendering and interaction tests; coordinator owns requirements, real API/browser verification and PR delivery; product reviewer independently reviews the integrated change.
+
+Verification: backend 167 tests, frontend 58 tests and production build pass. Coordinator submitted all twelve exact EN/CH samples to the deployed API as their department personas; each returned localized `question_pii_blocked`, no citations and cache bypass. Real Chrome repeated all six department/language journeys: seven visible suggestions, both samples fill/focus without submitting, explicit sends receive the actual guardrail refusal, no browser errors. Operations CH screenshots cover 1440px and 390px with no horizontal overflow. Existing backend catalog remains exactly fifteen questions.
+
+Independent reviewer: APPROVED, no actionable findings; 23 focused frontend tests passed, all twelve samples independently verified to refuse before provider/index/cache initialization, backend catalog byte-identical, and both screenshots reviewed. Review base `3f25e2948b0670143aab8ab3da90ad1f35b6a7a6`, captured file-set SHA256 `34ade96f9124dac648db42d0b76483972730bcd0d0996fe05993a93d9527c6c2`. Delivered through existing PR #17; no additional AWS deployment or merge.

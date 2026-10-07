@@ -1,7 +1,9 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from functools import lru_cache
+
+Language = Literal["en", "zh-TW"]
 
 MAX_DOCUMENT_BYTES = 1_000_000
 
@@ -32,62 +34,51 @@ class AuthorizationError(Exception):
     """Raised when a document is missing or outside the caller's access scope."""
 
 
-_CATALOG: tuple[tuple[str, str, str, str], ...] = (
-    ("finance-q4-budget-overview", "Q4 budget overview", "finance", "finance/q4-budget-overview.md"),
-    ("finance-expense-policy", "Expense policy", "finance", "finance/expense-policy.md"),
-    ("operations-runbook-procedures", "Runbook & procedures", "operations", "operations/runbook-procedures.md"),
-    ("operations-service-handoff", "Service handoff", "operations", "operations/service-handoff.md"),
-    ("people-employee-handbook", "Employee handbook", "people", "people/employee-handbook.md"),
-    ("people-leave-policy", "Leave policy", "people", "people/leave-policy.md"),
+_CATALOG: tuple[tuple[str, str, str, str, str], ...] = (
+    ("finance-q4-budget-overview", "Q4 budget overview", "第四季預算概覽", "finance", "finance/q4-budget-overview.md"),
+    ("finance-expense-policy", "Expense policy", "費用報銷政策", "finance", "finance/expense-policy.md"),
+    ("operations-runbook-procedures", "Runbook & procedures", "維運手冊與程序", "operations", "operations/runbook-procedures.md"),
+    ("operations-service-handoff", "Service handoff", "服務交接", "operations", "operations/service-handoff.md"),
+    ("people-employee-handbook", "Employee handbook", "員工手冊", "people", "people/employee-handbook.md"),
+    ("people-leave-policy", "Leave policy", "休假政策", "people", "people/leave-policy.md"),
 )
 
 
-def list_documents(departments: frozenset[str]) -> list[DocumentSummary]:
+def list_documents(departments: frozenset[str], language: Language = "en") -> list[DocumentSummary]:
     return [
-        DocumentSummary(id=doc_id, title=title, department=department)
-        for doc_id, title, department, _key in _CATALOG
+        DocumentSummary(id=doc_id, title=title_zh if language == "zh-TW" else title, department=department)
+        for doc_id, title, title_zh, department, _key in _CATALOG
         if department in departments
     ]
 
 
 def document_for_key(key: str) -> DocumentSummary | None:
-    return next(
-        (
-            DocumentSummary(id=doc_id, title=title, department=department)
-            for doc_id, title, department, source_key in _CATALOG
-            if key == source_key
-        ),
-        None,
-    )
+    language: Language = "zh-TW" if key.endswith("-ch.md") else "en"
+    return next((document for document in list_documents(frozenset({"finance", "operations", "people"}), language)
+                 if source_key_for_id(document.id, language) == key), None)
 
 
-def document_for_id(document_id: str) -> DocumentSummary | None:
-    return next(
-        (
-            DocumentSummary(id=doc_id, title=title, department=department)
-            for doc_id, title, department, _key in _CATALOG
-            if document_id == doc_id
-        ),
-        None,
-    )
+def document_for_id(document_id: str, language: Language = "en") -> DocumentSummary | None:
+    return next((document for document in list_documents(frozenset({"finance", "operations", "people"}), language)
+                 if document.id == document_id), None)
 
 
 def open_document(
     document_id: str,
     departments: frozenset[str],
     storage: DocumentStorage,
+    language: Language = "en",
 ) -> DocumentLink:
-    match = next((entry for entry in _CATALOG if entry[0] == document_id), None)
-    if match is None or match[2] not in departments:
+    document = document_for_id(document_id, language)
+    if document is None or document.department not in departments:
         raise AuthorizationError
-
-    doc_id, title, _department, key = match
-    url = storage.presigned_get_url(key, expires_in=120)
-    return DocumentLink(id=doc_id, title=title, url=url)
+    url = storage.presigned_get_url(source_key_for_id(document.id, language), expires_in=120)
+    return DocumentLink(id=document.id, title=document.title, url=url)
 
 
-def source_key_for_id(document_id: str) -> str:
-    return next(entry[3] for entry in _CATALOG if entry[0] == document_id)
+def source_key_for_id(document_id: str, language: Language = "en") -> str:
+    key = next(entry[4] for entry in _CATALOG if entry[0] == document_id)
+    return key.removesuffix(".md") + "-ch.md" if language == "zh-TW" else key
 
 
 @lru_cache(maxsize=1)
@@ -109,7 +100,9 @@ class S3DocumentStorage:
     def presigned_get_url(self, key: str, expires_in: int) -> str:
         return self._client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": self._bucket, "Key": key},
+            Params={"Bucket": self._bucket, "Key": key,
+                    "ResponseContentType": "text/plain; charset=utf-8",
+                    "ResponseContentDisposition": "inline"},
             ExpiresIn=expires_in,
         )
 

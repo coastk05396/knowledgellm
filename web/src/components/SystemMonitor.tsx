@@ -1,3 +1,4 @@
+import { useLanguage } from "../app/language";
 import { Coins, ShieldCheck } from "lucide-react";
 import type { GuardrailAction } from "../app/api";
 const guardrailLabels: Record<GuardrailAction, string> = {
@@ -24,16 +25,17 @@ export function SystemMonitor({
   busy?: boolean;
   failed?: boolean;
 }) {
+  const { t, language } = useLanguage();
   return (
-    <section className="system-monitor" aria-label="System monitor">
+    <section className="system-monitor" aria-label={t("System monitor")}>
       <div className="monitor-heading">
-        <span>System monitor</span>
-        <span>Session</span>
+        <span>{t("System monitor")}</span>
+        <span>{t("Session")}</span>
       </div>
       <div className="monitor-item">
         <ShieldCheck />
         <div>
-          <span className="mono">PII guardrail</span>
+          <span className="mono">{t("PII guardrail")}</span>
           <strong
             className={
               !busy &&
@@ -44,23 +46,27 @@ export function SystemMonitor({
             role="status"
           >
             {busy
-              ? "Checking…"
+              ? t("Checking…")
               : failed
-                ? "Check unavailable"
+                ? t("Check unavailable")
                 : guardrailAction
-                  ? guardrailLabels[guardrailAction]
+                  ? t(guardrailLabels[guardrailAction])
                   : receivedAnswer
-                    ? "Result unavailable"
-                    : "Awaiting question"}
+                    ? t("Result unavailable")
+                    : t("Awaiting question")}
           </strong>
         </div>
       </div>
       <div className="monitor-item">
         <Coins />
         <div>
-          <span className="mono">Token cost</span>
+          <span className="mono">{t("Token cost")}</span>
           <strong className="gold">
-            {cost === null ? "Unavailable" : `$${cost.toFixed(4)} est.`}
+            {cost === null
+              ? t("Unavailable")
+              : language === "zh-TW"
+                ? `約 $${cost.toFixed(4)}`
+                : `$${cost.toFixed(4)} est.`}
           </strong>
         </div>
       </div>

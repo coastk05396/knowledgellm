@@ -1,0 +1,38 @@
+[
+  {
+    "id": "guardrail-finance-receipt",
+    "department": "finance",
+    "question": "Demo receipt: can I reimburse a purchase for fictional alex.receipt@example.com ?",
+    "question_zh": "示範收據：可以替虛構帳號 alex.receipt@example.com 申請報銷嗎？"
+  },
+  {
+    "id": "guardrail-finance-reimbursement",
+    "department": "finance",
+    "question": "Demo reimbursement: may I add fictional contact +1 202-555-0101 to the expense report?",
+    "question_zh": "示範報銷：可以在費用報告加入虛構聯絡電話 +1 202-555-0101 嗎？"
+  },
+  {
+    "id": "guardrail-operations-handoff",
+    "department": "operations",
+    "question": "Demo handoff: should fictional sam.handoff@example.com receive the shift notes?",
+    "question_zh": "示範交接：應將輪班紀錄寄給虛構帳號 sam.handoff@example.com 嗎？"
+  },
+  {
+    "id": "guardrail-operations-oncall",
+    "department": "operations",
+    "question": "Demo on-call: can I list fictional contact +1 202-555-0102 for escalation?",
+    "question_zh": "示範值班：可以將虛構電話 +1 202-555-0102 列為升級處理聯絡方式嗎？"
+  },
+  {
+    "id": "guardrail-people-leave",
+    "department": "people",
+    "question": "Demo leave: can I send a leave request for fictional priya.leave@example.com ?",
+    "question_zh": "示範休假：可以替虛構帳號 priya.leave@example.com 提交請假申請嗎？"
+  },
+  {
+    "id": "guardrail-people-contact",
+    "department": "people",
+    "question": "Demo contact: may I add fictional phone +1 202-555-0103 to an employee profile?",
+    "question_zh": "示範聯絡資料：可以在員工資料加入虛構電話 +1 202-555-0103 嗎？"
+  }
+]

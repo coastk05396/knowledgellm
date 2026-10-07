@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from knowledgellm.documents import list_documents, s3_client, source_key_for_id
+from knowledgellm.documents import Language, list_documents, s3_client, source_key_for_id
 from knowledgellm.request_budget import require_time
 
 EMBEDDING_MODEL = "cohere.embed-multilingual-v3"
@@ -43,13 +43,13 @@ class S3IndexVersions:
             ContentType="application/json",
         )
 
-    def current(self, departments: frozenset[str]) -> IndexSnapshot:
+    def current(self, departments: frozenset[str], language: Language = "en") -> IndexSnapshot:
         versions: dict[str, str] = {}
         try:
-            for document in list_documents(departments):
+            for document in list_documents(departments, language):
                 require_time(6)
                 version = self.client.head_object(
-                    Bucket=self.bucket, Key=source_key_for_id(document.id)
+                    Bucket=self.bucket, Key=source_key_for_id(document.id, language)
                 ).get("VersionId")
                 if not isinstance(version, str) or not version or version == "null":
                     raise IndexUnavailable
@@ -73,13 +73,13 @@ class S3IndexVersions:
         except Exception as exc:
             raise IndexUnavailable("current document index is unavailable") from exc
         fingerprint = hashlib.sha256(json.dumps(
-            {"versions": versions, "model": EMBEDDING_MODEL, "collection": self.collection},
+            {"language": language, "versions": versions, "model": EMBEDDING_MODEL, "collection": self.collection},
             sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
         return IndexSnapshot(versions, fingerprint)
 
-    def is_current(self, snapshot: IndexSnapshot, departments: frozenset[str]) -> bool:
+    def is_current(self, snapshot: IndexSnapshot, departments: frozenset[str], language: Language = "en") -> bool:
         try:
-            return self.current(departments).fingerprint == snapshot.fingerprint
+            return self.current(departments, language).fingerprint == snapshot.fingerprint
         except IndexUnavailable:
             return False

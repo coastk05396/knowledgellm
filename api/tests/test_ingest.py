@@ -181,3 +181,32 @@ def test_eventbridge_preserves_immutable_version_id() -> None:
         "detail": {"bucket": {"name": "bucket"}, "object": {"key": "finance/expense-policy.md", "version-id": "version1"}},
     })[0]
     assert record["s3"]["object"]["versionId"] == "version1"
+
+
+def test_pdf_event_is_rejected_before_storage() -> None:
+    storage = FakeStorage("old source")
+    index = FakeIndex()
+    with pytest.raises(ValueError, match="approved catalog"):
+        ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.pdf"}}}]}, storage, index, FakeEmbedder())
+    assert storage.calls == []
+    assert index.replaced_documents == []
+
+
+def test_chinese_ingestion_uses_base_document_id_and_independent_version():
+    class Storage:
+        def read_document(self, key, version_id=None):
+            assert key == "finance/expense-policy-ch.md"
+            assert version_id == "zh-version"
+            return "費用報告須於 14 個日曆日內提交。"
+    class Index:
+        records = []
+        def upsert_version(self, document_id, records):
+            assert document_id == "finance-expense-policy"
+            self.records = records
+    index = Index()
+    count = ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/expense-policy-ch.md", "versionId": "zh-version"}}}]}, Storage(), index, FakeEmbedder())
+    assert count == 1
+    assert index.records[0]["source_version_id"] == "zh-version"
+    assert index.records[0]["source_key"] == "finance/expense-policy-ch.md"
+    assert index.records[0]["title"] == "費用報銷政策"
+    assert index.records[0]["department"] == "finance"

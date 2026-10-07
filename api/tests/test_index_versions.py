@@ -66,3 +66,29 @@ def test_unversioned_source_and_s3_errors_fail_closed():
     storage.manifests.clear()
     with pytest.raises(IndexUnavailable):
         versions.current(frozenset({"finance"}))
+
+
+def test_selected_language_checks_only_its_sources_and_isolates_snapshots():
+    class BilingualStorage(Storage):
+        def head_object(self, **kwargs):
+            self.heads.append(kwargs["Key"])
+            return {"VersionId": "zh-v1" if kwargs["Key"].endswith("-ch.md") else "en-v1"}
+    storage = BilingualStorage()
+    versions = S3IndexVersions("same-bucket", storage)
+    for doc in ("finance-expense-policy", "finance-q4-budget-overview"):
+        versions.complete(doc, "en-v1", 3)
+        versions.complete(doc, "zh-v1", 3)
+    english = versions.current(frozenset({"finance"}), "en")
+    assert storage.heads == ["finance/q4-budget-overview.md", "finance/expense-policy.md"]
+    storage.heads.clear()
+    chinese = versions.current(frozenset({"finance"}), "zh-TW")
+    assert storage.heads == ["finance/q4-budget-overview-ch.md", "finance/expense-policy-ch.md"]
+    assert english.versions == {"finance-q4-budget-overview": "en-v1", "finance-expense-policy": "en-v1"}
+    assert chinese.versions == {"finance-q4-budget-overview": "zh-v1", "finance-expense-policy": "zh-v1"}
+    assert english.fingerprint != chinese.fingerprint
+    assert versions.is_current(chinese, frozenset({"finance"}), "zh-TW")
+    assert not versions.is_current(chinese, frozenset({"finance"}), "en")
+    del storage.manifests[manifest_key(versions.collection, "finance-expense-policy", "zh-v1")]
+    with pytest.raises(IndexUnavailable):
+        versions.current(frozenset({"finance"}), "zh-TW")
+    assert versions.is_current(english, frozenset({"finance"}), "en")

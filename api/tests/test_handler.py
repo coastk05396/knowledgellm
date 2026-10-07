@@ -53,7 +53,7 @@ class FakeRetriever:
 
 @dataclass
 class FakeGenerator:
-    def generate(self, question, chunks):
+    def generate(self, question, chunks, language="en"):
         return "Vendor costs changed.", ["finance-q4-budget-overview"], Usage(30, 10, 0.0005)
 
 
@@ -146,7 +146,7 @@ def test_provider_error_does_not_echo_question_or_error(monkeypatch) -> None:
 
 def test_provider_timeout_returns_safe_retryable_error(monkeypatch) -> None:
     class SlowGenerator:
-        def generate(self, _question, _chunks):
+        def generate(self, _question, _chunks, language="en"):
             raise TimeoutError("upstream timeout with private request content")
 
     monkeypatch.setattr(handler, "create_chat_services", lambda: (FakeRetriever(), SlowGenerator()))
@@ -188,3 +188,73 @@ def test_non_access_token_claims_cannot_authorize_protected_routes(token_use) ->
 
     assert response["statusCode"] == 401
     assert json.loads(response["body"]) == {"error": "unauthenticated"}
+
+
+@pytest.mark.parametrize("language", ["zh-CN", "fr", None, 1, []])
+def test_chat_rejects_unsupported_language_before_providers(monkeypatch, language) -> None:
+    def unexpected():
+        pytest.fail("invalid language must be rejected before creating providers")
+    monkeypatch.setattr(handler, "create_chat_services", unexpected)
+    response = handler.handler({
+        "rawPath": "/chat", "body": json.dumps({"question": "What changed?", "language": language}),
+        "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}
+    }, object())
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"]) == {"error": "invalid_language"}
+
+
+def test_traditional_chinese_provider_failure_has_safe_localized_message(monkeypatch) -> None:
+    def broken():
+        raise RuntimeError("private provider data")
+    monkeypatch.setattr(handler, "create_chat_services", broken)
+    response = handler.handler({
+        "rawPath": "/chat", "body": json.dumps({"question": "預算是多少？", "language": "zh-TW"}),
+        "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}
+    }, object())
+    assert response["statusCode"] == 503
+    assert json.loads(response["body"]) == {"error": "assistant_unavailable", "message": "助理暫時無法使用，請稍後再試。"}
+
+
+@pytest.mark.parametrize("path", ["/documents", "/documents/finance-expense-policy"])
+@pytest.mark.parametrize("language", ["zh-CN", "fr", ""])
+def test_document_routes_reject_invalid_language_before_storage(path, language):
+    response = handler.handler({"rawPath": path, "queryStringParameters": {"language": language},
+        "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}}, object())
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"]) == {"error": "invalid_language"}
+
+
+def test_chinese_document_list_and_link_keep_department_acl(monkeypatch):
+    calls = []
+    class Storage:
+        def __init__(self, bucket):
+            assert bucket == "same-bucket"
+        def presigned_get_url(self, key, expires_in):
+            calls.append((key, expires_in))
+            return "https://private-source.example/signed"
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", Storage)
+    event = {"rawPath": "/documents", "queryStringParameters": {"language": "zh-TW"},
+        "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}}
+    response = handler.handler(event, object())
+    documents = json.loads(response["body"])["documents"]
+    assert [d["title"] for d in documents] == ["第四季預算概覽", "費用報銷政策"]
+    assert all(d["department"] == "finance" for d in documents)
+    event["rawPath"] = "/documents/finance-expense-policy"
+    event["pathParameters"] = {"documentId": "finance-expense-policy"}
+    response = handler.handler(event, object())
+    assert response["statusCode"] == 200
+    assert json.loads(response["body"])["document"]["title"] == "費用報銷政策"
+    assert calls == [("finance/expense-policy-ch.md", 120)]
+    event["rawPath"] = "/documents/people-leave-policy"
+    event["pathParameters"] = {"documentId": "people-leave-policy"}
+    assert handler.handler(event, object())["statusCode"] == 404
+    assert len(calls) == 1

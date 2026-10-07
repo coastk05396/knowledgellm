@@ -58,7 +58,7 @@ def test_s3_document_read_rejects_oversized_sources_before_streaming(monkeypatch
             return {"ContentLength": MAX_DOCUMENT_BYTES + 1, "Body": body}
 
     monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=lambda _name, **_kwargs: Client()))
-    storage = S3DocumentStorage("private-bucket")
+    storage = S3DocumentStorage("private-bucket", Client())
 
     with pytest.raises(ValueError):
         storage.read_document("finance/q4-budget-overview.md")
@@ -70,12 +70,14 @@ def test_versioned_document_read_uses_exact_version_and_closes_body():
     import io
     from knowledgellm.documents import S3DocumentStorage
 
-    body = io.BytesIO(b"immutable policy")
+    from pathlib import Path
+    contents = (Path(__file__).parents[1] / "src/knowledgellm/sample_docs/finance/expense-policy.md").read_bytes()
+    body = io.BytesIO(contents)
     class Client:
         def get_object(self, **kwargs):
             assert kwargs == {"Bucket": "bucket", "Key": "finance/expense-policy.md", "VersionId": "v1"}
-            return {"ContentLength": 16, "Body": body}
-    assert S3DocumentStorage("bucket", Client()).read_document("finance/expense-policy.md", "v1") == "immutable policy"
+            return {"ContentLength": len(contents), "Body": body}
+    assert "Corporate Expense Policy" in S3DocumentStorage("bucket", Client()).read_document("finance/expense-policy.md", "v1")
     assert body.closed
 
 
@@ -97,3 +99,47 @@ def test_s3_verification_connection_has_bounded_timeouts_and_is_reused(monkeypat
         assert config.retries["total_max_attempts"] == 1
     finally:
         s3_client.cache_clear()
+
+
+@pytest.mark.parametrize("language, key, title", [
+    ("en", "finance/expense-policy.md", "Expense policy"),
+    ("zh-TW", "finance/expense-policy-ch.md", "費用報銷政策"),
+])
+def test_document_language_selects_source_without_changing_identity_or_acl(language, key, title):
+    from knowledgellm.documents import document_for_key, source_key_for_id
+    storage = FakeStorage(calls=[])
+    link = open_document("finance-expense-policy", frozenset({"finance"}), storage, language)
+    assert (link.id, link.title) == ("finance-expense-policy", title)
+    assert storage.calls == [(key, 120)]
+    assert source_key_for_id(link.id, language) == key
+    assert document_for_key(key).id == link.id
+    assert document_for_key(key).title == title
+    with pytest.raises(AuthorizationError):
+        open_document(link.id, frozenset({"people"}), storage, language)
+    assert len(storage.calls) == 1
+
+
+def test_s3_chinese_markdown_decodes_utf8_and_closes_stream():
+    from io import BytesIO
+    from knowledgellm.documents import S3DocumentStorage
+    text = "費用須於 14 個日曆日內提交。"
+    data = text.encode("utf-8")
+    body = BytesIO(data)
+    class Client:
+        def get_object(self, **kwargs):
+            assert kwargs == {"Bucket": "existing-bucket", "Key": "finance/expense-policy-ch.md", "VersionId": "zh-version"}
+            return {"ContentLength": len(data), "Body": body}
+    assert S3DocumentStorage("existing-bucket", Client()).read_document("finance/expense-policy-ch.md", "zh-version") == text
+    assert body.closed
+
+
+def test_markdown_presigned_url_has_utf8_inline_headers_and_short_expiry():
+    from knowledgellm.documents import S3DocumentStorage
+    class Client:
+        def generate_presigned_url(self, operation, Params, ExpiresIn):
+            assert operation == "get_object"
+            assert Params == {"Bucket": "same-bucket", "Key": "finance/expense-policy-ch.md",
+                              "ResponseContentType": "text/plain; charset=utf-8", "ResponseContentDisposition": "inline"}
+            assert ExpiresIn == 120
+            return "signed-url"
+    assert S3DocumentStorage("same-bucket", Client()).presigned_get_url("finance/expense-policy-ch.md", 120) == "signed-url"

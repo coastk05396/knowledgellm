@@ -52,7 +52,7 @@ describe("Knowledge API boundary", () => {
       ).toBeUndefined();
     },
   );
-  it("sends only the question with a bearer token", async () => {
+  it("sends the question and selected language with a bearer token", async () => {
     appConfig.apiUrl = "https://api.example.com/";
     let sentUrl = "";
     let sent: RequestInit = {};
@@ -75,9 +75,25 @@ describe("Knowledge API boundary", () => {
     });
     expect(JSON.parse(sent.body as string)).toEqual({
       question: "What changed?",
+      language: "en",
     });
     expect(result.answer).toBe("Authorized answer");
     expect(result.cost_usd).toBeUndefined();
+  });
+  it("sends Traditional Chinese as the response language", async () => {
+    appConfig.apiUrl = "https://api.example.com";
+    let body = "";
+    vi.stubGlobal("fetch", async (_url: string, options: RequestInit) => {
+      body = options.body as string;
+      return new Response(
+        JSON.stringify({ answer: "核准預算", citations: [] }),
+      );
+    });
+    await knowledgeApi.askQuestion("access-token", "核准預算是多少？", "zh-TW");
+    expect(JSON.parse(body)).toEqual({
+      question: "核准預算是多少？",
+      language: "zh-TW",
+    });
   });
   it("rejects unknown departments rather than rendering their documents", async () => {
     appConfig.apiUrl = "https://api.example.com";
@@ -113,7 +129,7 @@ describe("Knowledge API boundary", () => {
       knowledgeApi.openDocument("access-token", "finance/id with spaces"),
     ).rejects.toThrow();
     expect(sentUrl).toBe(
-      "https://api.example.com/documents/finance%2Fid%20with%20spaces",
+      "https://api.example.com/documents/finance%2Fid%20with%20spaces?language=en",
     );
   });
   it("returns the authorized HTTPS source URL from the document envelope", async () => {
@@ -140,3 +156,44 @@ describe("Knowledge API boundary", () => {
     );
   });
 });
+
+it.each(["en", "zh-TW"] as const)(
+  "selects %s document lists and source links",
+  async (language) => {
+    appConfig.apiUrl = "https://api.example.com";
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      urls.push(url);
+      return new Response(
+        JSON.stringify(
+          url.includes("/documents/source")
+            ? {
+                document: {
+                  id: "source",
+                  title: "Source",
+                  url: `https://docs.example.com/source${language === "zh-TW" ? "-ch" : ""}.md`,
+                },
+              }
+            : {
+                documents: [
+                  { id: "source", title: "Source", department: "finance" },
+                ],
+              },
+        ),
+      );
+    });
+    await knowledgeApi.loadDocuments("access", language);
+    const destination = await knowledgeApi.openDocument(
+      "access",
+      "source",
+      language,
+    );
+    expect(urls).toEqual([
+      `https://api.example.com/documents?language=${language}`,
+      `https://api.example.com/documents/source?language=${language}`,
+    ]);
+    expect(destination).toBe(
+      `https://docs.example.com/source${language === "zh-TW" ? "-ch" : ""}.md`,
+    );
+  },
+);

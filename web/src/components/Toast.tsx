@@ -1,3 +1,4 @@
+import { useLanguage } from "../app/language";
 import { useEffect } from "react";
 import { CheckCircle2, X } from "lucide-react";
 import type { Department } from "../app/api";
@@ -17,6 +18,7 @@ export function Toast({
   onClose,
   duration = 4000,
 }: ToastProps) {
+  const { t, language } = useLanguage();
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -31,13 +33,17 @@ export function Toast({
           <CheckCircle2 size={18} />
         </span>
         <div className="toast-content">
-          <span className="toast-title">{message}</span>
-          {subtitle && <span className="toast-subtitle">{subtitle}</span>}
+          <span className="toast-title">
+            {language === "zh-TW" && message.endsWith(" signed in successfully")
+              ? `${message.replace(" signed in successfully", "")} 已成功登入`
+              : t(message)}
+          </span>
+          {subtitle && <span className="toast-subtitle">{t(subtitle)}</span>}
         </div>
         <button
           className="toast-close"
           onClick={onClose}
-          aria-label="Dismiss notification"
+          aria-label={t("Dismiss notification")}
           type="button"
         >
           <X size={16} />

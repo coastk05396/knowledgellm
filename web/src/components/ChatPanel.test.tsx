@@ -5,6 +5,7 @@ import { ChatPanel } from "./ChatPanel";
 describe("ChatPanel pending status", () => {
   it("announces a stable status while pending and clears it when finished", () => {
     const props = {
+      documents: [],
       name: "Sam",
       departments: ["operations" as const],
       messages: [],
@@ -15,6 +16,13 @@ describe("ChatPanel pending status", () => {
     };
     const { rerender } = render(<ChatPanel {...props} busy />);
 
+    const suggestions = screen.getByRole("region", {
+      name: "Operations suggested questions",
+    });
+    expect(suggestions.querySelectorAll("button")).toHaveLength(7);
+    suggestions
+      .querySelectorAll("button")
+      .forEach((button) => expect(button).toBeDisabled());
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Checking your permitted sources");
     expect(status.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
