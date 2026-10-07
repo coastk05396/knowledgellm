@@ -8,7 +8,7 @@ Requirements are maintained in PROMTS.md. No new hosting service or bucket is pa
 
 ## Owners and Status
 
-- Coordinator: requirements, deployment inventory, integration, live verification, screenshots, and PR submission — complete.
+- Coordinator: requirements, integration, local verification, screenshots, and draft PR submission complete; live PDF indexing, chat cutover, and deployed acceptance pending account model authorization.
 - Frontend builder: web/ localization, language control, persistence, and request contract — complete.
 - Backend builder: api/, scripts/, PDF extraction/assets, catalog keys, and chat language contract — complete.
 - Independent reviewer: source/PDF/script review — approved; deployed acceptance pending.
