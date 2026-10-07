@@ -28,68 +28,8 @@ Built with **React / TypeScript / Vite** · **AWS Lambda (Python 3.12)** · **Am
                                                                          └────────────────────────────────┘
 ```
 
----
 
 
----
-
-## 🏗️ System Architecture & Tech Stack
-
-KnowledgeLLM ships two architectural designs: the **Active Hybrid Demo** (cost-conscious, sub-20 ms cache, fast iteration) and the **All-AWS Enterprise Reference** (fully managed AWS-native services).
-
-### 1 · Active Hybrid Demo (Deployed Stack)
-
-![KnowledgeLLM Advanced RAG & Cache Architecture](docs/design/architecture/knowledgellm-rag-pipeline.svg)
-
-#### Request Lifecycle & Cache / RAG Flow
-
-```
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║                              KnowledgeLLM  ·  Request Lifecycle                                 ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
-
-  ┌───────────────────┐  Cognito JWT  ┌──────────────────────────┐       ┌───────────────────────┐
-  │   CLIENT (React)  │─────────────►│  API Gateway (JWT Auth)   │──────►│  Orchestrator Lambda  │
-  └───────────────────┘              └──────────────────────────┘       └───────────┬───────────┘
-                                                                                     │
-                                      ┌──────────────────────────────────────────────┤
-                                      │                                              │
-                           ╔══════════▼══════════╗                      ╔════════════▼════════════╗
-                           ║   Fast Path          ║                      ║   RAG Fallback           ║
-                           ║   Cache HIT ✓        ║                      ║   Cache MISS ✗           ║
-                           ╚══════════╤══════════╝                      ╚════════════╤════════════╝
-                                      │                                              │
-                           ┌──────────▼──────────┐                      ┌───────────▼─────────────┐
-                           │  Amazon DynamoDB     │                      │  AWS Bedrock Cohere v3  │
-                           │  Answer Cache        │                      │  Embed · 1 024-dim      │
-                           ├─────────────────────┤                      │  ap-southeast-1         │
-                           │  SHA-256 key lookup  │                      └───────────┬─────────────┘
-                           │  ~15 ms · 0 tokens   │                                  │  Dense vector
-                           │  24 h TTL · $0 cost  │                      ┌───────────▼─────────────┐
-                           └──────────┬──────────┘                       │  Qdrant Vector DB        │
-                                      │                                  │  Dept payload filter     │
-                                      │                                  │  Top-5 scoped chunks     │
-                                      │                                  └───────────┬─────────────┘
-                                      │                                              │  Ranked excerpts
-                                      │                                  ┌───────────▼─────────────┐
-                                      │                                  │  Groq Cloud LLM          │
-                                      │                                  │  gpt-oss-20b · temp=0    │
-                                      │                                  │  Rigid JSON schema       │
-                                      │                                  └───────────┬─────────────┘
-                                      │                                              │  Answer + Citations
-                                      └──────────────────────┬───────────────────────┘
-                                                             │
-                                              ┌──────────────▼──────────────┐
-                                              │    Citation Guard            │
-                                              │  Validate cited doc IDs      │
-                                              │  against permitted excerpts  │
-                                              └──────────────┬──────────────┘
-                                                             │
-                                              ┌──────────────▼──────────────┐
-                                              │    200 OK · Grounded JSON   │
-                                              │    answer  +  citations      │
-                                              └─────────────────────────────┘
-```
 
 ---
 
