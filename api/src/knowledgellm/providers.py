@@ -12,26 +12,10 @@ from knowledgellm.ingest import VectorIndex
 from knowledgellm.retrieval import department_filter
 from knowledgellm.index_versions import IndexSnapshot
 from knowledgellm.request_budget import require_time
-from knowledgellm.embedding import COLLECTION, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, MAX_EMBEDDING_BYTES
+from knowledgellm.embedding import COLLECTION, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, split_embedding_text
 
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
 _LOG = logging.getLogger(__name__)
-
-
-def split_embedding_text(text: str) -> list[str]:
-    # UTF-8 byte bound is conservative even for multilingual/byte-fallback tokens.
-    parts: list[str] = []
-    start = 0
-    size = 0
-    for position, character in enumerate(text):
-        width = len(character.encode("utf-8"))
-        if size + width > MAX_EMBEDDING_BYTES:
-            parts.append(text[start:position])
-            start, size = position, 0
-        size += width
-    if start < len(text):
-        parts.append(text[start:])
-    return parts
 
 
 class QdrantVectorIndex(VectorIndex):

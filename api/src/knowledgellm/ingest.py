@@ -5,6 +5,7 @@ from typing import Protocol
 from urllib.parse import quote, unquote_plus
 
 from knowledgellm.documents import DocumentStorage, document_for_key
+from knowledgellm.embedding import split_embedding_text
 from knowledgellm.index_versions import S3IndexVersions
 
 
@@ -79,8 +80,6 @@ def ingest_s3_object(
     document = document_for_key(key)
     if document is None or not key.endswith(".md"):
         raise ValueError("document key is not in the approved catalog")
-
-    from knowledgellm.providers import split_embedding_text
 
     record = event["Records"][0]
     version_id = record["s3"]["object"].get("versionId")
