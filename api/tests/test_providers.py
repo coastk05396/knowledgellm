@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from knowledgellm.embedding import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
+from knowledgellm.embedding import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, RETRIEVAL_VERSION, SPARSE_MODEL
 from knowledgellm.index_versions import IndexSnapshot
 from knowledgellm.providers import (
     QdrantRetriever,
@@ -16,17 +16,26 @@ from knowledgellm.providers import (
 
 
 class Qdrant:
-    def __init__(self, dimensions=EMBEDDING_DIMENSIONS):
+    def __init__(self, dimensions=EMBEDDING_DIMENSIONS, *, exists=True, sparse=True):
         self.dimensions = dimensions
+        self.exists = exists
+        self.has_sparse = sparse
         self.deleted = False
         self.points = []
         self.query = None
+        self.created = None
+        self.requests = None
 
     def collection_exists(self, _name):
-        return True
+        return self.exists
 
     def get_collection(self, _name):
-        return SimpleNamespace(config=SimpleNamespace(params=SimpleNamespace(vectors=SimpleNamespace(size=self.dimensions))))
+        vectors = {"dense": SimpleNamespace(size=self.dimensions, distance="Cosine")}
+        sparse = {"bm25": SimpleNamespace(modifier="idf")} if self.has_sparse else {}
+        return SimpleNamespace(config=SimpleNamespace(params=SimpleNamespace(vectors=vectors, sparse_vectors=sparse)))
+
+    def create_collection(self, **kwargs):
+        self.created = kwargs
 
     def create_payload_index(self, **kwargs):
         pass
@@ -42,6 +51,10 @@ class Qdrant:
     def query_points(self, **kwargs):
         self.query = kwargs
         return SimpleNamespace(points=[])
+
+    def query_batch_points(self, **kwargs):
+        self.requests = kwargs["requests"]
+        return [SimpleNamespace(points=[]) for _ in self.requests]
 
 
 def test_text_splitting_preserves_unicode_without_truncation():
@@ -60,12 +73,28 @@ def test_version_upsert_uses_qdrant_cloud_inference_document_and_retains_old_poi
         "source_version_id": "v1",
     }])
     assert not client.deleted
-    assert client.points[0].vector.text == "fictional policy chunk"
-    assert client.points[0].vector.model == EMBEDDING_MODEL
+    assert client.points[0].vector["dense"].text == "fictional policy chunk"
+    assert client.points[0].vector["dense"].model == EMBEDDING_MODEL
+    assert client.points[0].vector["bm25"].text == "fictional policy chunk"
+    assert client.points[0].vector["bm25"].model == SPARSE_MODEL
     assert client.points[0].payload["source_version_id"] == "v1"
     assert client.points[0].payload["text"] == "fictional policy chunk"
     with pytest.raises(ValueError, match="dimensions"):
         QdrantVectorIndex(Qdrant(1024)).upsert_version("id", [])
+
+
+def test_collection_creation_uses_named_dense_and_sparse_idf_vectors():
+    client = Qdrant(exists=False)
+    QdrantVectorIndex(client).upsert_version("id", [])
+    assert client.created["collection_name"] == "knowledgellm-qdrant-hybrid-e5-small"
+    assert client.created["vectors_config"]["dense"].size == EMBEDDING_DIMENSIONS
+    assert client.created["vectors_config"]["dense"].distance.value == "Cosine"
+    assert client.created["sparse_vectors_config"]["bm25"].modifier.value == "idf"
+
+
+def test_collection_validation_rejects_missing_sparse_schema():
+    with pytest.raises(ValueError, match="hybrid embedding schema"):
+        QdrantVectorIndex(Qdrant(sparse=False)).upsert_version("id", [])
 
 
 def test_snapshot_query_embeds_at_qdrant_and_filters_exact_document_version_pairs():
@@ -73,9 +102,17 @@ def test_snapshot_query_embeds_at_qdrant_and_filters_exact_document_version_pair
     retriever = QdrantRetriever(client)
     snapshot = IndexSnapshot({"finance-expense-policy": "version1", "finance-q4-budget-overview": "version2"}, "fp")
     retriever.search_snapshot("What policy?", frozenset({"finance"}), snapshot)
-    assert client.query["query"].text == "What policy?"
-    assert client.query["query"].model == EMBEDDING_MODEL
-    serialized = client.query["query_filter"].model_dump()
+    assert client.query["query"].fusion.value == "rrf"
+    dense, sparse = client.query["prefetch"]
+    assert dense.using == "dense"
+    assert dense.query.text == "What policy?"
+    assert dense.query.model == EMBEDDING_MODEL
+    assert sparse.using == "bm25"
+    assert sparse.query.text == "What policy?"
+    assert sparse.query.model == SPARSE_MODEL
+    assert dense.limit == sparse.limit == 10
+    assert dense.filter == sparse.filter
+    serialized = dense.filter.model_dump()
     assert serialized["must"][0]["key"] == "department"
     pairs = serialized["must"][1]["should"]
     assert [(pair["must"][0]["match"]["value"], pair["must"][1]["match"]["value"]) for pair in pairs] == list(snapshot.versions.items())
@@ -174,10 +211,15 @@ def test_long_query_batches_all_segments_and_merges_best_unique_hits():
     question = "finance budget! " * 100
     client = Client()
     result = QdrantRetriever(client, limit=3).search_snapshot(question, frozenset({"finance"}), IndexSnapshot({"finance-expense-policy": "v1"}, "fp"))
-    assert "".join(request.query.text for request in client.requests) == question
-    assert all(len(request.query.text.encode()) <= 240 for request in client.requests)
-    assert all(request.query.model == EMBEDDING_MODEL for request in client.requests)
-    assert all(request.filter.must[0].key == "department" for request in client.requests)
+    query_parts = [request.prefetch[0].query.text for request in client.requests]
+    assert "".join(query_parts) == question
+    assert all(len(part.encode()) <= 240 for part in query_parts)
+    assert all(request.query.fusion.value == "rrf" for request in client.requests)
+    assert all([prefetch.using for prefetch in request.prefetch] == ["dense", "bm25"] for request in client.requests)
+    assert all(request.prefetch[0].query.model == EMBEDDING_MODEL for request in client.requests)
+    assert all(request.prefetch[1].query.model == SPARSE_MODEL for request in client.requests)
+    assert all(request.prefetch[0].filter.must[0].key == "department" for request in client.requests)
+    assert all(request.prefetch[0].filter == request.prefetch[1].filter for request in client.requests)
     assert all(request.with_payload is True for request in client.requests)
     last = len(client.requests) - 1
     assert [chunk.text for chunk in result] == [f"unique {last}", f"rank {last}", f"unique {last - 1}"]
@@ -186,7 +228,7 @@ def test_long_query_batches_all_segments_and_merges_best_unique_hits():
 def test_short_query_does_not_need_batch_api():
     client = Qdrant()
     assert QdrantRetriever(client).search("budget?", frozenset({"finance"})) == []
-    assert client.query["query"].text == "budget?"
+    assert client.query["prefetch"][0].query.text == "budget?"
 
 
 def test_real_sdk_sends_cloud_documents_without_local_model_inference():
@@ -208,14 +250,26 @@ def test_real_sdk_sends_cloud_documents_without_local_model_inference():
     client = QdrantClient(url="https://qdrant.example", cloud_inference=True, check_compatibility=False,
                           transport=httpx.MockTransport(handle))
     try:
-        client.upsert("test", [models.PointStruct(id=1, vector=models.Document(text="policy", model=EMBEDDING_MODEL))], wait=True)
-        client.query_points("test", query=models.Document(text="budget", model=EMBEDDING_MODEL))
-        client.query_batch_points("test", requests=[models.QueryRequest(query=models.Document(text="part", model=EMBEDDING_MODEL))])
+        client.upsert("test", [models.PointStruct(id=1, vector={
+            "dense": models.Document(text="policy", model=EMBEDDING_MODEL),
+            "bm25": models.Document(text="policy", model=SPARSE_MODEL),
+        })], wait=True)
+        prefetch = [
+            models.Prefetch(query=models.Document(text="budget", model=EMBEDDING_MODEL), using="dense", limit=10),
+            models.Prefetch(query=models.Document(text="budget", model=SPARSE_MODEL), using="bm25", limit=10),
+        ]
+        fusion = models.FusionQuery(fusion=models.Fusion.RRF)
+        client.query_points("test", prefetch=prefetch, query=fusion)
+        client.query_batch_points("test", requests=[models.QueryRequest(prefetch=prefetch, query=fusion)])
     finally:
         client.close()
-    assert requests[0]["points"][0]["vector"] == {"text": "policy", "model": EMBEDDING_MODEL}
-    assert requests[1]["query"]["nearest"] == {"text": "budget", "model": EMBEDDING_MODEL}
-    assert requests[2]["searches"][0]["query"]["nearest"] == {"text": "part", "model": EMBEDDING_MODEL}
+    assert requests[0]["points"][0]["vector"]["dense"] == {"text": "policy", "model": EMBEDDING_MODEL}
+    assert requests[0]["points"][0]["vector"]["bm25"] == {"text": "policy", "model": SPARSE_MODEL}
+    assert requests[1]["prefetch"][0]["using"] == "dense"
+    assert requests[1]["prefetch"][1]["using"] == "bm25"
+    assert requests[1]["query"] == {"fusion": "rrf"}
+    assert requests[2]["searches"][0]["prefetch"][0]["query"] == {"text": "budget", "model": EMBEDDING_MODEL}
+    assert requests[2]["searches"][0]["prefetch"][1]["query"] == {"text": "budget", "model": SPARSE_MODEL}
 
 
 def test_incomplete_cloud_batch_fails_closed():
@@ -230,4 +284,6 @@ def test_embedding_defaults_use_free_multilingual_model_and_distinct_collection(
     from knowledgellm.embedding import DEFAULT_COLLECTION
     assert EMBEDDING_MODEL == "intfloat/multilingual-e5-small"
     assert EMBEDDING_DIMENSIONS == 384
-    assert DEFAULT_COLLECTION == "knowledgellm-qdrant-multilingual-e5-small"
+    assert DEFAULT_COLLECTION == "knowledgellm-qdrant-hybrid-e5-small"
+    assert SPARSE_MODEL == "Qdrant/bm25"
+    assert RETRIEVAL_VERSION == "hybrid-rrf-v1"

@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import pytest
 
+from knowledgellm import answer_cache
 from knowledgellm.answer_cache import DynamoAnswerCache, cache_key, demo_question_id, demo_questions
 from knowledgellm.chat import ChatAnswer, Citation, Usage
 
@@ -28,22 +29,29 @@ ANSWER = ChatAnswer("Budget is $2.5M.", (Citation("finance-q4-budget-overview", 
 def test_separate_lambda_cache_instances_share_persisted_answers_until_expiry():
     client = DynamoClient()
     first_lambda = DynamoAnswerCache("answers", client, clock=lambda: 100)
-    second_lambda = DynamoAnswerCache("answers", client, clock=lambda: 86_499)
+    second_lambda = DynamoAnswerCache("answers", client, clock=lambda: 399)
     first_lambda.put("key", ANSWER)
     result = second_lambda.get("key")
     assert result.answer == "Budget is $2.5M."
     assert [c.document_id for c in result.citations] == ["finance-q4-budget-overview"]
     assert result.usage is None
-    expired_lambda = DynamoAnswerCache("answers", client, clock=lambda: 86_500)
+    expired_lambda = DynamoAnswerCache("answers", client, clock=lambda: 400)
     assert expired_lambda.get("key") is None
     assert "key" in client.tables["answers"]  # TTL deletion has not happened yet.
+
+
+def test_cache_entry_is_valid_before_and_expired_at_ttl_boundary():
+    client = DynamoClient()
+    DynamoAnswerCache("answers", client, clock=lambda: 100).put("key", ANSWER)
+    assert DynamoAnswerCache("answers", client, clock=lambda: 399).get("key") is not None
+    assert DynamoAnswerCache("answers", client, clock=lambda: 400).get("key") is None
 
 
 def test_persistence_contains_only_answer_and_safe_metadata():
     client = DynamoClient()
     DynamoAnswerCache("answers", client, clock=lambda: 100).put("key", ANSWER)
     item = client.tables["answers"]["key"]
-    assert item["expires_at"] == {"N": "86500"}
+    assert item["expires_at"] == {"N": "400"}
     payload = json.loads(item["payload"]["S"])
     assert set(payload) == {"schema", "answer", "citation_ids", "guardrail_action", "retrieved_count", "redacted_source_count"}
     assert "usage" not in payload
@@ -90,6 +98,23 @@ def test_key_partitions_document_versions_and_models(monkeypatch):
     assert cache_key("finance-01", frozenset({"finance"}), "v2") != key
     assert cache_key("finance-02", frozenset({"finance"}), "v1") != key
     monkeypatch.setenv("GROQ_MODEL", "replacement-model")
+    assert cache_key("finance-01", frozenset({"finance"}), "v1") != key
+
+
+def test_hybrid_cache_key_does_not_reuse_dense_collection_entries(monkeypatch):
+    key = cache_key("finance-01", frozenset({"finance"}), "v1")
+    monkeypatch.setenv("QDRANT_COLLECTION", "knowledgellm-qdrant-multilingual-e5-small")
+    assert cache_key("finance-01", frozenset({"finance"}), "v1") != key
+
+
+def test_cache_key_includes_sparse_model_and_fusion_version(monkeypatch):
+    key = cache_key("finance-01", frozenset({"finance"}), "v1")
+    monkeypatch.setattr(answer_cache, "SPARSE_MODEL", "Qdrant/other")
+    assert cache_key("finance-01", frozenset({"finance"}), "v1") != key
+    monkeypatch.setattr(answer_cache, "SPARSE_MODEL", "Qdrant/bm25")
+    monkeypatch.setattr(answer_cache, "RETRIEVAL_VERSION", "hybrid-rrf-v2")
+    assert cache_key("finance-01", frozenset({"finance"}), "v1") != key
+    monkeypatch.setenv("QDRANT_COLLECTION", "knowledgellm-qdrant-multilingual-e5-small")
     assert cache_key("finance-01", frozenset({"finance"}), "v1") != key
 
 

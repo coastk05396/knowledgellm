@@ -7,7 +7,7 @@ from typing import Any
 
 from knowledgellm.documents import Language, list_documents, s3_client, source_key_for_id
 from knowledgellm.request_budget import require_time
-from knowledgellm.embedding import COLLECTION, EMBEDDING_MODEL
+from knowledgellm.embedding import COLLECTION, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, RETRIEVAL_VERSION, SPARSE_MODEL
 
 
 class IndexUnavailable(Exception):
@@ -37,6 +37,8 @@ class S3IndexVersions:
             Key=manifest_key(self.collection, document_id, version_id),
             Body=json.dumps({"document_id": document_id, "version_id": version_id,
                              "model": EMBEDDING_MODEL, "collection": self.collection,
+                             "sparse_model": SPARSE_MODEL, "retrieval": RETRIEVAL_VERSION,
+                             "vector_schema": {"dense": EMBEDDING_DIMENSIONS, "sparse": "bm25"},
                              "chunk_count": chunk_count}).encode(),
             ContentType="application/json",
         )
@@ -64,6 +66,9 @@ class S3IndexVersions:
                     or manifest.get("version_id") != version
                     or manifest.get("model") != EMBEDDING_MODEL
                     or manifest.get("collection") != self.collection
+                    or manifest.get("sparse_model") != SPARSE_MODEL
+                    or manifest.get("retrieval") != RETRIEVAL_VERSION
+                    or manifest.get("vector_schema") != {"dense": EMBEDDING_DIMENSIONS, "sparse": "bm25"}
                     or not isinstance(manifest.get("chunk_count"), int)
                     or manifest["chunk_count"] < 0):
                     raise IndexUnavailable
@@ -71,7 +76,10 @@ class S3IndexVersions:
         except Exception as exc:
             raise IndexUnavailable("current document index is unavailable") from exc
         fingerprint = hashlib.sha256(json.dumps(
-            {"language": language, "versions": versions, "model": EMBEDDING_MODEL, "collection": self.collection},
+            {"language": language, "versions": versions, "model": EMBEDDING_MODEL,
+             "sparse_model": SPARSE_MODEL, "retrieval": RETRIEVAL_VERSION,
+             "vector_schema": {"dense": EMBEDDING_DIMENSIONS, "sparse": "bm25"},
+             "collection": self.collection},
             sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
         return IndexSnapshot(versions, fingerprint)

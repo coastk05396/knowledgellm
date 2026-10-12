@@ -24,6 +24,8 @@ const translations: Record<string, string> = {
   "01. Department folders": "01. 部門資料夾",
   "Each folder is linked to one user": "每個資料夾對應一位使用者",
   Loading: "讀取中",
+  Unlocked: "已解鎖",
+  "Cached Hit": "快取命中",
   "02. Ask KnowledgeLLM": "02. 詢問 KnowledgeLLM",
   Active: "使用中",
   "Access-scoped answers with source citations":

@@ -44,6 +44,7 @@ describe("Authorized knowledge workspace", () => {
       expect(
         container.querySelectorAll(".folders .lucide-lock-keyhole"),
       ).toHaveLength(3);
+      expect(screen.queryByText("Unlocked")).not.toBeInTheDocument();
 
       resolveDocuments([
         { id: "source", title: "Permitted source", department },
@@ -56,10 +57,13 @@ describe("Authorized knowledge workspace", () => {
       });
       expect(within(identity).getByText("AWS Cognito Verified")).toBeVisible();
       expect(screen.getAllByText("AWS Cognito Verified")).toHaveLength(1);
-      const folder = screen.getByRole("button", { name: `${label} / ${name}` });
+      const folder = screen.getByRole("button", {
+        name: `${label} / ${name} — Unlocked`,
+      });
       expect(folder).toBeEnabled();
       expect(folder).toHaveAttribute("aria-expanded", "true");
       expect(folder.querySelector(".lucide-lock-keyhole")).toBeNull();
+      expect(within(folder).getByText("Unlocked")).toBeVisible();
       expect(
         container.querySelectorAll(".folders .lucide-lock-keyhole"),
       ).toHaveLength(2);
@@ -71,6 +75,7 @@ describe("Authorized knowledge workspace", () => {
       expect(
         container.querySelectorAll(".folders .lucide-lock-keyhole"),
       ).toHaveLength(3);
+      expect(screen.queryByText("Unlocked")).not.toBeInTheDocument();
     },
   );
   it("keeps the mobile identity and status copy aligned with the reference", async () => {
@@ -136,6 +141,23 @@ describe("Authorized knowledge workspace", () => {
     expect(
       screen.getByRole("button", { name: /Operations.*restricted/i }),
     ).toBeDisabled();
+  });
+  it("does not show an unlocked owner when the authorized listing fails", async () => {
+    render(
+      <Workspace
+        session={session}
+        onSwitch={async () => {}}
+        api={{
+          loadDocuments: async () => {
+            throw new Error("unavailable");
+          },
+          askQuestion: async () => ({ answer: "", citations: [] }),
+          openDocument: async () => "https://docs.example.com/source.md",
+        }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeVisible());
+    expect(screen.queryByText("Unlocked")).not.toBeInTheDocument();
   });
   it("sends questions, displays cited answers, and clears the conversation", async () => {
     let submitted = "";

@@ -106,7 +106,20 @@ export function ChatPanel({
                   <Sparkles />
                 </span>
                 <div>
-                  <p className="message-label">{t("KnowledgeLLM assistant")}</p>
+                  <div className="assistant-meta">
+                    <p className="message-label">
+                      {t("KnowledgeLLM assistant")}
+                    </p>
+                    {message.response.cache_status === "hit" && (
+                      <span
+                        className="cache-hit"
+                        role="status"
+                        aria-label={t("Cached Hit")}
+                      >
+                        {t("Cached Hit")}
+                      </span>
+                    )}
+                  </div>
                   <p className="message-text">{message.response.answer}</p>
                   <div className={`citations ${departments[0] ?? "finance"}`}>
                     {message.response.citations.map((citation) => {
