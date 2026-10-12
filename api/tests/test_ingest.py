@@ -26,12 +26,6 @@ class FakeIndex:
         self.records.extend(records)
 
 
-@dataclass
-class FakeEmbedder:
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        return [[float(index)] for index, _text in enumerate(texts)]
-
-
 def test_ingestion_derives_department_and_source_from_trusted_key() -> None:
     storage = FakeStorage("A fictional finance document with one short section.")
     index = FakeIndex()
@@ -40,7 +34,6 @@ def test_ingestion_derives_department_and_source_from_trusted_key() -> None:
         {"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.md"}}}]},
         storage,
         index,
-        FakeEmbedder(),
     )
 
     assert count == 1
@@ -59,7 +52,6 @@ def test_ingestion_rejects_unknown_key_before_reading_source() -> None:
             {"Records": [{"s3": {"object": {"key": "people/other-file.md"}}}]},
             storage,
             FakeIndex(),
-            FakeEmbedder(),
         )
 
     assert storage.calls == []
@@ -72,7 +64,6 @@ def test_empty_document_creates_no_vectors() -> None:
         {"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.md"}}}]},
         FakeStorage("  \n "),
         index,
-        FakeEmbedder(),
     )
 
     assert count == 0
@@ -119,7 +110,7 @@ def test_versioned_ingestion_reads_immutable_source_and_never_replaces() -> None
         def upsert_version(self, document_id, records):
             assert document_id == "finance-expense-policy"
             assert all(record["source_version_id"] == "older-event-version" for record in records)
-            assert all(len(record["text"].encode()) <= 480 for record in records)
+            assert all(len(record["text"].encode()) <= 240 for record in records)
 
     class Versions:
         completed = None
@@ -129,7 +120,7 @@ def test_versioned_ingestion_reads_immutable_source_and_never_replaces() -> None
     versions = Versions()
     count = ingest_s3_object(
         {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": "older-event-version"}}}]},
-        Storage(), Index(), FakeEmbedder(), versions=versions,
+        Storage(), Index(), versions=versions,
     )
     assert count > 1
     assert versions.completed == ("finance-expense-policy", "older-event-version", count)
@@ -151,7 +142,7 @@ def test_failed_version_index_never_publishes_completion() -> None:
     with pytest.raises(RuntimeError, match="vector service"):
         ingest_s3_object(
             {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": "v1"}}}]},
-            Storage(), Index(), FakeEmbedder(), versions=Versions(),
+            Storage(), Index(), versions=Versions(),
         )
 
 
@@ -169,7 +160,7 @@ def test_version_specific_point_ids_are_stable_and_cannot_overwrite_newer_versio
     for version in ("new", "old", "new"):
         ingest_s3_object(
             {"Records": [{"s3": {"object": {"key": "finance/expense-policy.md", "versionId": version}}}]},
-            Storage(), index, FakeEmbedder(),
+            Storage(), index,
         )
     assert index.ids[0] == index.ids[2]
     assert index.ids[0] != index.ids[1]
@@ -187,7 +178,7 @@ def test_pdf_event_is_rejected_before_storage() -> None:
     storage = FakeStorage("old source")
     index = FakeIndex()
     with pytest.raises(ValueError, match="approved catalog"):
-        ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.pdf"}}}]}, storage, index, FakeEmbedder())
+        ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/q4-budget-overview.pdf"}}}]}, storage, index)
     assert storage.calls == []
     assert index.replaced_documents == []
 
@@ -204,9 +195,18 @@ def test_chinese_ingestion_uses_base_document_id_and_independent_version():
             assert document_id == "finance-expense-policy"
             self.records = records
     index = Index()
-    count = ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/expense-policy-ch.md", "versionId": "zh-version"}}}]}, Storage(), index, FakeEmbedder())
+    count = ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/expense-policy-ch.md", "versionId": "zh-version"}}}]}, Storage(), index)
     assert count == 1
     assert index.records[0]["source_version_id"] == "zh-version"
     assert index.records[0]["source_key"] == "finance/expense-policy-ch.md"
     assert index.records[0]["title"] == "費用報銷政策"
     assert index.records[0]["department"] == "finance"
+def test_long_multilingual_source_reaches_index_without_lost_content():
+    contents = "財務." * 1000
+    index = FakeIndex()
+    count = ingest_s3_object({"Records": [{"s3": {"object": {"key": "finance/expense-policy.md"}}}]}, FakeStorage(contents), index)
+    assert count > 1
+    assert all(len(record["text"].encode()) <= 240 for record in index.records)
+    # Original markdown windows overlap; every source character remains represented.
+    assert sum(len(record["text"]) for record in index.records) >= len(contents)
+    assert all("vector" not in record for record in index.records)

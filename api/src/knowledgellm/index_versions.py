@@ -7,9 +7,9 @@ from typing import Any
 
 from knowledgellm.documents import Language, list_documents, s3_client, source_key_for_id
 from knowledgellm.request_budget import require_time
+from knowledgellm.embedding import COLLECTION, EMBEDDING_MODEL
 
-EMBEDDING_MODEL = "cohere.embed-multilingual-v3"
-DEFAULT_COLLECTION = "knowledgellm-cohere-v3"
+DEFAULT_COLLECTION = COLLECTION
 
 
 class IndexUnavailable(Exception):

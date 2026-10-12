@@ -1,6 +1,6 @@
 import os
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Protocol
 from urllib.parse import quote, unquote_plus
 
@@ -12,10 +12,6 @@ class VectorIndex(Protocol):
     def upsert_version(self, document_id: str, records: list[dict[str, object]]) -> None: ...
 
     def replace_document(self, document_id: str, records: list[dict[str, object]]) -> None: ...
-
-
-class Embedder(Protocol):
-    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
 def chunk_markdown(text: str, max_chars: int = 1200, overlap: int = 150) -> list[str]:
@@ -77,7 +73,6 @@ def ingest_s3_object(
     event: Mapping[str, object],
     storage: DocumentStorage,
     index: VectorIndex,
-    embedder: Embedder,
     versions: S3IndexVersions | None = None,
 ) -> int:
     key = _source_key(event)
@@ -103,16 +98,12 @@ def ingest_s3_object(
         else:
             index.replace_document(document.id, [])
         return 0
-    vectors = embedder.embed(chunks)
-    if len(vectors) != len(chunks):
-        raise ValueError("embedding count did not match chunk count")
     records: list[dict[str, object]] = []
-    for chunk_index, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
+    for chunk_index, chunk in enumerate(chunks):
         point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{key}:{version_id or 'unversioned'}:{chunk_index}"))
         records.append(
             {
                 "id": point_id,
-                "vector": vector,
                 "text": chunk,
                 "department": document.department,
                 "document_id": document.id,
@@ -136,7 +127,7 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
     del context
     from knowledgellm.configuration import read_secret
     from knowledgellm.documents import S3DocumentStorage
-    from knowledgellm.providers import CohereEmbedder, QdrantVectorIndex, qdrant_client
+    from knowledgellm.providers import QdrantVectorIndex, qdrant_client
     from knowledgellm.index_versions import S3IndexVersions
 
     bucket = os.getenv("DOCUMENTS_BUCKET")
@@ -149,7 +140,6 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
     storage = S3DocumentStorage(bucket)
     client = qdrant_client(qdrant_url, qdrant_api_key)
     index = QdrantVectorIndex(client)
-    embedder = CohereEmbedder()
     versions = S3IndexVersions(bucket)
     indexed = 0
     for record in records:
@@ -160,5 +150,5 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
         bucket_name = event_bucket.get("name") if isinstance(event_bucket, dict) else None
         if bucket_name != bucket:
             raise ValueError("object event does not match configured bucket")
-        indexed += ingest_s3_object({"Records": [record]}, storage, index, embedder, versions=versions)
+        indexed += ingest_s3_object({"Records": [record]}, storage, index, versions=versions)
     return {"indexed_chunks": indexed}

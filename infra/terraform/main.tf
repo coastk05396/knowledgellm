@@ -26,34 +26,31 @@ resource "aws_ssm_parameter" "qdrant_api_key" {
 }
 
 locals {
-  lambda_package      = abspath("${path.module}/${var.lambda_package_path}")
-  cognito_issuer      = "https://cognito-idp.${var.aws_region}.${data.aws_partition.current.dns_suffix}/${aws_cognito_user_pool.users.id}"
-  qdrant_api_key_arn  = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
-  groq_api_key_arn    = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
-  embedding_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:ap-southeast-1::foundation-model/cohere.embed-multilingual-v3"
+  lambda_package     = abspath("${path.module}/${var.lambda_package_path}")
+  cognito_issuer     = "https://cognito-idp.${var.aws_region}.${data.aws_partition.current.dns_suffix}/${aws_cognito_user_pool.users.id}"
+  qdrant_api_key_arn = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
+  groq_api_key_arn   = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
   common_environment = {
-    EMBEDDING_REGION                 = "ap-southeast-1"
     ANSWER_CACHE_TABLE               = aws_dynamodb_table.answer_cache.name
     ANSWER_CACHE_ENABLED             = tostring(var.answer_cache_enabled)
     PYTHONPATH                       = "/var/task/src"
     DOCUMENTS_BUCKET                 = aws_s3_bucket.documents.id
     QDRANT_URL                       = var.qdrant_url
     QDRANT_API_KEY_SECRET_ARN        = local.qdrant_api_key_arn
-    QDRANT_COLLECTION                = "knowledgellm-cohere-v3"
-    EMBEDDING_MODEL                  = "cohere.embed-multilingual-v3"
+    QDRANT_COLLECTION                = "knowledgellm-qdrant-multilingual-e5-small"
+    EMBEDDING_MODEL                  = "intfloat/multilingual-e5-small"
     GROQ_API_KEY_SECRET_ARN          = local.groq_api_key_arn
     GROQ_MODEL                       = var.groq_model
     GROQ_INPUT_RATE_PER_MILLION_USD  = var.groq_input_rate_per_million_usd
     GROQ_OUTPUT_RATE_PER_MILLION_USD = var.groq_output_rate_per_million_usd
   }
   ingestion_environment = {
-    EMBEDDING_REGION          = "ap-southeast-1"
     PYTHONPATH                = "/var/task/src"
     DOCUMENTS_BUCKET          = aws_s3_bucket.documents.id
     QDRANT_URL                = var.qdrant_url
     QDRANT_API_KEY_SECRET_ARN = local.qdrant_api_key_arn
-    QDRANT_COLLECTION         = "knowledgellm-cohere-v3"
-    EMBEDDING_MODEL           = "cohere.embed-multilingual-v3"
+    QDRANT_COLLECTION         = "knowledgellm-qdrant-multilingual-e5-small"
+    EMBEDDING_MODEL           = "intfloat/multilingual-e5-small"
   }
   lambda_trust_policy = jsonencode({
     Version = "2012-10-17"
@@ -217,11 +214,6 @@ resource "aws_iam_role_policy" "knowledge" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
-        Resource = local.embedding_model_arn
-      },
-      {
-        Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:PutItem"]
         Resource = aws_dynamodb_table.answer_cache.arn
       },
@@ -255,13 +247,8 @@ resource "aws_iam_role_policy" "ingestion" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
-        Resource = local.embedding_model_arn
-      },
-      {
-        Effect   = "Allow"
         Action   = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.documents.arn}/_indexes/knowledgellm-cohere-v3/*"
+        Resource = "${aws_s3_bucket.documents.arn}/_indexes/knowledgellm-qdrant-multilingual-e5-small/*"
       },
       {
         Effect   = "Allow"

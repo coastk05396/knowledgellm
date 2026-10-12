@@ -97,7 +97,7 @@ variable "auth_lambda_package_path" {
 }
 
 variable "answer_cache_enabled" {
-  description = "Enable fixed demo-answer caching only after validating the Cohere index migration."
+  description = "Enable fixed demo-answer caching only after validating the Qdrant Cloud Inference index migration."
   type        = bool
   default     = false
 }
