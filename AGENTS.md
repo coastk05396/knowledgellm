@@ -16,6 +16,12 @@ Use English for source code, comments, and documentation. Prefer clean, strictly
 
 Frontend tests use Vitest and Testing Library (`*.test.tsx`); backend tests use pytest (`test_*.py`). Add focused behavior tests for changes and run both suites plus the frontend build before submitting. No numeric coverage threshold is set.
 
+## UI Preview Handoff
+
+For user-facing UI changes, start a local preview and a temporary Cloudflare tunnel before handing off the result. Provide both the localhost URL with its port and the public HTTPS URL so the user can test the change. Verify that both URLs serve the changed build, and leave the preview running until the user asks to stop it or it is replaced by a new preview. State any authentication, API, or real-device verification limits explicitly.
+
+Prefer serving the production build from a loopback-bound preview server. Run shell commands through `rtk`; for example, from `web/`, use `rtk npm exec vite preview -- --host 127.0.0.1 --port 5179 --strictPort`, then `rtk proxy cloudflared tunnel --url http://127.0.0.1:5179 --http-host-header localhost:5179` in a separate process. Reuse an available port or choose another free port when needed. Retire only this task's previous preview; preserve unrelated servers and tunnels. Keep credentials out of the preview and do not change deployed CORS or authentication settings without applicable authorization.
+
 ## Commit & Pull Request Guidelines
 
 Use signed Conventional Commits, such as `docs: add contributor guide` or `fix: handle empty input`. Pull requests should target `main`, explain the change and its motivation, link relevant issues when available, and include test results. Add screenshots for changes that affect a user interface.
