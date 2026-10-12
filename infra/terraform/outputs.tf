@@ -51,6 +51,6 @@ output "qdrant_api_key_ssm_parameter_name" {
 }
 
 output "answer_cache_table_name" {
-  description = "Shared DynamoDB demo-answer cache with 24-hour item expiry."
+  description = "Shared DynamoDB demo-answer cache with five-minute logical expiry."
   value       = aws_dynamodb_table.answer_cache.name
 }

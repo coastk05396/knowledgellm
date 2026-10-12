@@ -12,7 +12,7 @@ from knowledgellm.ingest import VectorIndex
 from knowledgellm.retrieval import department_filter
 from knowledgellm.index_versions import IndexSnapshot
 from knowledgellm.request_budget import require_time
-from knowledgellm.embedding import COLLECTION, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, split_embedding_text
+from knowledgellm.embedding import COLLECTION, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, SPARSE_MODEL, split_embedding_text
 
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
 _LOG = logging.getLogger(__name__)
@@ -29,12 +29,27 @@ class QdrantVectorIndex(VectorIndex):
         if not self.client.collection_exists(self.collection_name):
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=models.VectorParams(size=EMBEDDING_DIMENSIONS, distance=models.Distance.COSINE),
+                vectors_config={
+                    "dense": models.VectorParams(size=EMBEDDING_DIMENSIONS, distance=models.Distance.COSINE),
+                },
+                sparse_vectors_config={
+                    "bm25": models.SparseVectorParams(modifier=models.Modifier.IDF),
+                },
             )
         else:
-            vectors = self.client.get_collection(self.collection_name).config.params.vectors
-            if isinstance(vectors, dict) or vectors.size != EMBEDDING_DIMENSIONS:
-                raise ValueError("collection does not match Qdrant embedding dimensions")
+            params = self.client.get_collection(self.collection_name).config.params
+            vectors = params.vectors
+            sparse_vectors = params.sparse_vectors
+            if (
+                not isinstance(vectors, dict)
+                or "dense" not in vectors
+                or vectors["dense"].size != EMBEDDING_DIMENSIONS
+                or vectors["dense"].distance != models.Distance.COSINE
+                or not isinstance(sparse_vectors, dict)
+                or "bm25" not in sparse_vectors
+                or sparse_vectors["bm25"].modifier != models.Modifier.IDF
+            ):
+                raise ValueError("collection does not match hybrid embedding schema or dimensions")
         for field_name in ("department", "document_id", "source_version_id"):
             self.client.create_payload_index(
                 collection_name=self.collection_name,
@@ -75,7 +90,10 @@ class QdrantVectorIndex(VectorIndex):
         points = [
             models.PointStruct(
                 id=record["id"],
-                vector=models.Document(text=record["text"], model=EMBEDDING_MODEL),
+                vector={
+                    "dense": models.Document(text=record["text"], model=EMBEDDING_MODEL),
+                    "bm25": models.Document(text=record["text"], model=SPARSE_MODEL),
+                },
                 payload={key: value for key, value in record.items() if key != "id"},
             )
             for record in records
@@ -124,8 +142,8 @@ class QdrantRetriever(Retriever):
         if len(parts) == 1:
             results = [self.client.query_points(
                 collection_name=self.collection_name,
-                query=models.Document(text=parts[0], model=EMBEDDING_MODEL),
-                query_filter=query_filter,
+                prefetch=self._prefetches(parts[0], query_filter),
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
                 limit=self.limit,
                 with_payload=True,
             )]
@@ -133,8 +151,9 @@ class QdrantRetriever(Retriever):
             results = self.client.query_batch_points(
                 collection_name=self.collection_name,
                 requests=[models.QueryRequest(
-                    query=models.Document(text=part, model=EMBEDDING_MODEL),
-                    filter=query_filter, limit=self.limit, with_payload=True,
+                    prefetch=self._prefetches(part, query_filter),
+                    query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    limit=self.limit, with_payload=True,
                 ) for part in parts],
             )
             if len(results) != len(parts):
@@ -167,6 +186,24 @@ class QdrantRetriever(Retriever):
             if len(chunks) == self.limit:
                 break
         return chunks
+
+    def _prefetches(self, text: str, query_filter: Any) -> list[Any]:
+        from qdrant_client import models
+
+        return [
+            models.Prefetch(
+                query=models.Document(text=text, model=EMBEDDING_MODEL),
+                using="dense",
+                filter=query_filter,
+                limit=self.limit * 2,
+            ),
+            models.Prefetch(
+                query=models.Document(text=text, model=SPARSE_MODEL),
+                using="bm25",
+                filter=query_filter,
+                limit=self.limit * 2,
+            ),
+        ]
 
 
 class GroqGenerator(Generator):

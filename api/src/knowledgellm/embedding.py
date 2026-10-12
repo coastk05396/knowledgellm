@@ -3,8 +3,10 @@ import os
 
 DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+SPARSE_MODEL = "Qdrant/bm25"
+RETRIEVAL_VERSION = "hybrid-rrf-v1"
 EMBEDDING_DIMENSIONS = 384
-DEFAULT_COLLECTION = "knowledgellm-qdrant-multilingual-e5-small"
+DEFAULT_COLLECTION = "knowledgellm-qdrant-hybrid-e5-small"
 COLLECTION = os.getenv("QDRANT_COLLECTION", DEFAULT_COLLECTION)
 # Keep byte-bounded text conservative across English and Traditional Chinese.
 MAX_EMBEDDING_BYTES = 240

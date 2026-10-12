@@ -13,10 +13,12 @@ export function DepartmentFolders({
   documents,
   onOpen,
   loading,
+  authorizedListing,
 }: {
   documents: DocumentSummary[];
   onOpen: (id: string) => void;
   loading: boolean;
+  authorizedListing: boolean;
 }) {
   const { t } = useLanguage();
   const [closed, setClosed] = useState<string[]>([]);
@@ -52,7 +54,7 @@ export function DepartmentFolders({
           const docs = documents.filter(
             (doc) => doc.department === person.department,
           );
-          const permitted = docs.length > 0;
+          const permitted = authorizedListing && docs.length > 0;
           const expanded = permitted && !closed.includes(person.department);
           return (
             <div
@@ -62,7 +64,7 @@ export function DepartmentFolders({
               <button
                 className="folder-button"
                 disabled={!permitted}
-                aria-label={`${t(person.label)} / ${person.name}${permitted ? "" : ` — ${t("restricted")}`}`}
+                aria-label={`${t(person.label)} / ${person.name} — ${t(permitted ? "Unlocked" : "restricted")}`}
                 aria-expanded={expanded}
                 aria-controls={`files-${person.department}`}
                 onClick={() =>
@@ -76,6 +78,9 @@ export function DepartmentFolders({
                 <Folder />
                 <strong>
                   {t(person.label)} / {person.name}
+                  {permitted && (
+                    <span className="folder-unlocked">{t("Unlocked")}</span>
+                  )}
                 </strong>
                 <span className="folder-count">
                   {permitted ? docs.length : <LockKeyhole size={16} />}

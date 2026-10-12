@@ -8,7 +8,7 @@ Permission-aware RAG demo for Finance, Operations, and People, with grounded cit
 
 **Backend:** Python 3.12 · boto3 · Qdrant Cloud Inference (multilingual embeddings) · Qdrant Cloud · Groq (`openai/gpt-oss-20b`) · pytest
 
-The demo embeds both English and Traditional Chinese Markdown with Qdrant Cloud Inference's free `intfloat/multilingual-e5-small` model (384 dimensions). The existing English and translated sources stay in one new, model-specific collection.
+The demo indexes English and Traditional Chinese Markdown in `knowledgellm-qdrant-hybrid-e5-small`: 384-dimensional `intfloat/multilingual-e5-small` dense vectors plus server-side `Qdrant/bm25` sparse vectors, fused with RRF. The former dense-only collection remains available for rollback; vectors are never mixed across collection schemas.
 
 **Infra:** Cognito · API Gateway · Lambda · S3 · EventBridge · DynamoDB · Parameter Store · IAM · CloudWatch · Terraform · AWS SAM
 
@@ -31,7 +31,7 @@ CHAT / DOCUMENT ACCESS
                                           │                       │
                                          HIT                MISS / BYPASS
                                           │                       ▼
-                                          │     Qdrant Cloud Inference (query vector)
+                                          │     Qdrant Cloud Inference (dense + BM25 prefetch, RRF)
                                           │                       │
                                           │                       ▼
                                           │     ┌────────────────────────────────────┐
@@ -58,7 +58,7 @@ SUPPORTING SERVICES
   IAM → Scoped permissions · Terraform / SAM → AWS resources
 ```
 
-Cache: exactly 15 suggested questions, 24-hour TTL, disabled by default. Custom questions bypass caching; source-version changes invalidate earlier entries. [Operations guide](docs/qdrant-cloud-inference-operations.md).
+Cache: exactly 15 suggested questions, five-minute logical TTL, disabled by default. Custom questions bypass caching; source-version and hybrid-retrieval changes invalidate earlier entries. [Operations guide](docs/qdrant-cloud-inference-operations.md).
 
 ## All-AWS Reference
 
