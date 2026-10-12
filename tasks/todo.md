@@ -8,4 +8,4 @@
 - [x] Deploy the existing ingestion Lambda, migrate and verify 12 S3 versions, evaluate 30 bilingual retrieval cases against the dense baseline, and preserve the old collection.
 - [x] Cut the existing knowledge Lambda over to hybrid search, enable the existing DynamoDB cache, and verify live cache miss/hit, scope isolation, citations, and Traditional Chinese output.
 - [ ] Deploy the frontend to its hosting provider and verify the labels in the hosted authenticated UI; this checkout contains no frontend hosting deployment workflow.
-- [ ] Submit the signed pull request after final branch/check review.
+- [x] Submit signed PR #20 to `main` after final branch/check review.
