@@ -1,63 +1,22 @@
-import io
+import logging
 import json
 from types import SimpleNamespace
 
 import pytest
 
-from knowledgellm.providers import CohereEmbedder, QdrantVectorIndex, QdrantRetriever, estimate_cost_usd, split_embedding_text
+from knowledgellm.embedding import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
 from knowledgellm.index_versions import IndexSnapshot
-
-
-class Bedrock:
-    def __init__(self):
-        self.requests = []
-        self.dimension = 1024
-        self.bodies = []
-
-    def invoke_model(self, **kwargs):
-        self.requests.append(kwargs)
-        request = json.loads(kwargs["body"])
-        body = io.BytesIO(json.dumps({"embeddings": [[0.25] * self.dimension for _ in request["texts"]]}).encode())
-        self.bodies.append(body)
-        return {"body": body}
-
-
-@pytest.mark.parametrize("input_type", ["search_query", "search_document"])
-def test_cohere_batches_without_truncation_and_closes_bodies(input_type):
-    client = Bedrock()
-    vectors = CohereEmbedder(client, input_type).embed(["policy"] * 97)
-    assert len(vectors) == 97
-    assert len(client.requests) == 2
-    assert all(request["modelId"] == "cohere.embed-multilingual-v3" for request in client.requests)
-    assert [len(json.loads(request["body"])["texts"]) for request in client.requests] == [96, 1]
-    assert all(json.loads(request["body"])["truncate"] == "NONE" for request in client.requests)
-    assert all(json.loads(request["body"])["input_type"] == input_type for request in client.requests)
-    assert all(body.closed for body in client.bodies)
-
-
-def test_cohere_rejects_wrong_dimensions_and_overlong_input():
-    client = Bedrock()
-    client.dimension = 384
-    with pytest.raises(ValueError, match="dimensions"):
-        CohereEmbedder(client).embed(["policy"])
-    with pytest.raises(ValueError, match="chunked"):
-        CohereEmbedder(client).embed(["界" * 481])
-
-
-def test_multilingual_chunking_preserves_entire_text():
-    text = "財務政策 abc😀" * 500
-    parts = split_embedding_text(text)
-    assert "".join(parts) == text
-    assert all(len(part.encode()) <= 480 for part in parts)
-
-
-def test_cost_requires_both_current_rates_and_reports_an_estimate():
-    assert estimate_cost_usd(1000, 500, 0.075, 0.3) == 0.000225
-    assert estimate_cost_usd(1000, 500, None, 0.3) is None
+from knowledgellm.providers import (
+    QdrantRetriever,
+    QdrantVectorIndex,
+    estimate_cost_usd,
+    qdrant_client,
+    split_embedding_text,
+)
 
 
 class Qdrant:
-    def __init__(self, dimensions=1024):
+    def __init__(self, dimensions=EMBEDDING_DIMENSIONS):
         self.dimensions = dimensions
         self.deleted = False
         self.points = []
@@ -85,111 +44,95 @@ class Qdrant:
         return SimpleNamespace(points=[])
 
 
-def test_version_upsert_retains_old_points_and_validates_collection():
+def test_text_splitting_preserves_unicode_without_truncation():
+    text = "財務政策 abc😀" * 500
+    parts = split_embedding_text(text)
+    assert "".join(parts) == text
+    assert all(len(part.encode()) <= 240 for part in parts)
+
+
+def test_version_upsert_uses_qdrant_cloud_inference_document_and_retains_old_points():
     client = Qdrant()
     index = QdrantVectorIndex(client)
-    index.upsert_version("finance-expense-policy", [{"id": "5a27ad88-b676-43db-b1ea-af624c358fcf", "vector": [0.] * 1024, "source_version_id": "v1"}])
+    index.upsert_version("finance-expense-policy", [{
+        "id": "5a27ad88-b676-43db-b1ea-af624c358fcf",
+        "text": "fictional policy chunk",
+        "source_version_id": "v1",
+    }])
     assert not client.deleted
+    assert client.points[0].vector.text == "fictional policy chunk"
+    assert client.points[0].vector.model == EMBEDDING_MODEL
     assert client.points[0].payload["source_version_id"] == "v1"
+    assert client.points[0].payload["text"] == "fictional policy chunk"
     with pytest.raises(ValueError, match="dimensions"):
-        QdrantVectorIndex(Qdrant(384)).upsert_version("id", [])
+        QdrantVectorIndex(Qdrant(1024)).upsert_version("id", [])
 
 
-def test_snapshot_query_filters_exact_document_version_pairs():
+def test_snapshot_query_embeds_at_qdrant_and_filters_exact_document_version_pairs():
     client = Qdrant()
-    retriever = QdrantRetriever(client, CohereEmbedder(Bedrock(), "search_query"))
+    retriever = QdrantRetriever(client)
     snapshot = IndexSnapshot({"finance-expense-policy": "version1", "finance-q4-budget-overview": "version2"}, "fp")
     retriever.search_snapshot("What policy?", frozenset({"finance"}), snapshot)
+    assert client.query["query"].text == "What policy?"
+    assert client.query["query"].model == EMBEDDING_MODEL
     serialized = client.query["query_filter"].model_dump()
     assert serialized["must"][0]["key"] == "department"
     pairs = serialized["must"][1]["should"]
     assert [(pair["must"][0]["match"]["value"], pair["must"][1]["match"]["value"]) for pair in pairs] == list(snapshot.versions.items())
 
 
-def test_embedding_logs_only_stage_timing(caplog):
-    import logging
-    with caplog.at_level(logging.INFO, logger="knowledgellm.providers"):
-        CohereEmbedder(Bedrock(), "search_query").embed(["private question contents"])
-    events = [json.loads(record.message) for record in caplog.records if record.name == "knowledgellm.providers"]
-    assert {event["stage"] for event in events} == {"embedding"}
-    assert all(event["duration_ms"] >= 0 for event in events)
-    assert "private question contents" not in caplog.text
-
-
 def test_snapshot_retriever_drops_payloads_outside_exact_versions():
     class Client(Qdrant):
         def query_points(self, **kwargs):
+            self.query = kwargs
             base = {"document_id": "finance-expense-policy", "title": "Policy", "department": "finance", "text": "private source"}
             return SimpleNamespace(points=[
                 SimpleNamespace(payload={**base, "source_version_id": "old"}),
                 SimpleNamespace(payload={**base, "source_version_id": "current"}),
                 SimpleNamespace(payload={**base, "department": "people", "source_version_id": "current"}),
             ])
-    retriever = QdrantRetriever(Client(), CohereEmbedder(Bedrock(), "search_query"))
+
+    retriever = QdrantRetriever(Client())
     result = retriever.search_snapshot("policy?", frozenset({"finance"}), IndexSnapshot({"finance-expense-policy": "current"}, "fp"))
     assert len(result) == 1
     assert result[0].department == "finance"
 
 
-def test_retrieval_logs_only_stage_timing(caplog):
-    import logging
+def test_indexing_and_retrieval_logs_contain_timings_but_no_content(caplog):
+    client = Qdrant()
+    index = QdrantVectorIndex(client)
+    retriever = QdrantRetriever(client)
     with caplog.at_level(logging.INFO, logger="knowledgellm.providers"):
-        retriever = QdrantRetriever(Qdrant(), CohereEmbedder(Bedrock(), "search_query"))
+        index.upsert_version("finance-expense-policy", [{"id": "id", "text": "private document contents"}])
         retriever.search("private question contents", frozenset({"finance"}))
     events = [json.loads(record.message) for record in caplog.records if record.name == "knowledgellm.providers"]
-    assert {event["stage"] for event in events} == {"embedding", "retrieval"}
-    assert all(set(event) == {"stage", "duration_ms"} for event in events)
+    assert {event["stage"] for event in events} == {"qdrant_upsert", "retrieval"}
+    assert all(set(event) == {"stage", "duration_ms"} and event["duration_ms"] >= 0 for event in events)
+    assert "private document contents" not in caplog.text
     assert "private question contents" not in caplog.text
 
 
-def test_bedrock_connection_uses_singapore_and_is_reused(monkeypatch):
-    import boto3
-    from knowledgellm.providers import _bedrock_client
-
-    calls = []
-    def create_client(service, **kwargs):
-        calls.append((service, kwargs))
-        return object()
-    monkeypatch.setattr(boto3, "client", create_client)
-    _bedrock_client.cache_clear()
-    try:
-        assert _bedrock_client() is _bedrock_client()
-        assert len(calls) == 1
-        assert calls[0][0] == "bedrock-runtime"
-        assert calls[0][1]["region_name"] == "ap-southeast-1"
-        assert calls[0][1]["config"].retries["total_max_attempts"] == 1
-        assert calls[0][1]["config"].connect_timeout == 2
-        assert calls[0][1]["config"].read_timeout == 5
-    finally:
-        _bedrock_client.cache_clear()
+def test_cost_requires_both_current_rates_and_reports_an_estimate():
+    assert estimate_cost_usd(1000, 500, 0.075, 0.3) == 0.000225
+    assert estimate_cost_usd(1000, 500, None, 0.3) is None
 
 
-def test_incomplete_upsert_cannot_be_marked_indexed():
-    class Client(Qdrant):
-        def upsert(self, **kwargs):
-            return SimpleNamespace(status="acknowledged")
-    with pytest.raises(RuntimeError, match="completed"):
-        QdrantVectorIndex(Client()).upsert_version("finance-expense-policy", [{"id": "5a27ad88-b676-43db-b1ea-af624c358fcf", "vector": [0.] * 1024, "source_version_id": "v1"}])
-
-
-def test_remote_provider_timeouts_fit_chat_request_budget(monkeypatch):
-    import groq
+def test_qdrant_connection_enables_cloud_inference_and_is_reused(monkeypatch):
     import qdrant_client as qdrant_module
-    from knowledgellm.providers import GroqGenerator, qdrant_client
 
     calls = []
+
     def client(**kwargs):
         calls.append(kwargs)
         return object()
-    monkeypatch.setattr(groq, "Groq", client)
+
     monkeypatch.setattr(qdrant_module, "QdrantClient", client)
     qdrant_client.cache_clear()
     try:
-        GroqGenerator("test-placeholder-key")
-        qdrant_client("https://qdrant.example", "test-placeholder-key")
-        assert calls[0]["timeout"] == 8.0
-        assert calls[0]["max_retries"] == 0
-        assert calls[1]["timeout"] == 3.0
+        assert qdrant_client("https://qdrant.example", "placeholder-api-key") is qdrant_client("https://qdrant.example", "placeholder-api-key")
+        assert len(calls) == 1
+        assert calls[0]["timeout"] == 3.0
+        assert calls[0]["cloud_inference"] is True
     finally:
         qdrant_client.cache_clear()
 
@@ -216,3 +159,75 @@ def test_generation_prompt_enforces_requested_language_and_grounding(language, e
     generator.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     generator.model = "test-model"
     assert generator.generate("Question", [RetrievedChunk("finance-expense-policy", "Expense policy", "finance", "Source")], language) == (refusal, [], None)
+def test_long_query_batches_all_segments_and_merges_best_unique_hits():
+    class Client(Qdrant):
+        requests = None
+        def query_batch_points(self, **kwargs):
+            self.requests = kwargs["requests"]
+            base = {"document_id": "finance-expense-policy", "title": "Policy", "department": "finance", "source_version_id": "v1"}
+            return [SimpleNamespace(points=[
+                SimpleNamespace(id="duplicate", score=float(i), payload={**base, "text": f"rank {i}"}),
+                SimpleNamespace(id=f"unique{i}", score=float(i) + 0.5, payload={**base, "text": f"unique {i}"}),
+            ]) for i, _ in enumerate(self.requests)]
+        def query_points(self, **kwargs):
+            pytest.fail("long queries must use one batch request")
+    question = "finance budget! " * 100
+    client = Client()
+    result = QdrantRetriever(client, limit=3).search_snapshot(question, frozenset({"finance"}), IndexSnapshot({"finance-expense-policy": "v1"}, "fp"))
+    assert "".join(request.query.text for request in client.requests) == question
+    assert all(len(request.query.text.encode()) <= 240 for request in client.requests)
+    assert all(request.query.model == EMBEDDING_MODEL for request in client.requests)
+    assert all(request.filter.must[0].key == "department" for request in client.requests)
+    assert all(request.with_payload is True for request in client.requests)
+    last = len(client.requests) - 1
+    assert [chunk.text for chunk in result] == [f"unique {last}", f"rank {last}", f"unique {last - 1}"]
+
+
+def test_short_query_does_not_need_batch_api():
+    client = Qdrant()
+    assert QdrantRetriever(client).search("budget?", frozenset({"finance"})) == []
+    assert client.query["query"].text == "budget?"
+
+
+def test_real_sdk_sends_cloud_documents_without_local_model_inference():
+    import httpx
+    from qdrant_client import QdrantClient, models
+
+    requests = []
+    def handle(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        if request.url.path.endswith("/batch"):
+            result = [{"points": []} for _ in payload["searches"]]
+        elif "query" in request.url.path:
+            result = {"points": []}
+        else:
+            result = {"operation_id": 1, "status": "completed"}
+        return httpx.Response(200, json={"result": result, "status": "ok", "time": 0})
+
+    client = QdrantClient(url="https://qdrant.example", cloud_inference=True, check_compatibility=False,
+                          transport=httpx.MockTransport(handle))
+    try:
+        client.upsert("test", [models.PointStruct(id=1, vector=models.Document(text="policy", model=EMBEDDING_MODEL))], wait=True)
+        client.query_points("test", query=models.Document(text="budget", model=EMBEDDING_MODEL))
+        client.query_batch_points("test", requests=[models.QueryRequest(query=models.Document(text="part", model=EMBEDDING_MODEL))])
+    finally:
+        client.close()
+    assert requests[0]["points"][0]["vector"] == {"text": "policy", "model": EMBEDDING_MODEL}
+    assert requests[1]["query"]["nearest"] == {"text": "budget", "model": EMBEDDING_MODEL}
+    assert requests[2]["searches"][0]["query"]["nearest"] == {"text": "part", "model": EMBEDDING_MODEL}
+
+
+def test_incomplete_cloud_batch_fails_closed():
+    class Client(Qdrant):
+        def query_batch_points(self, **kwargs):
+            return []
+    with pytest.raises(ValueError, match="incomplete inference"):
+        QdrantRetriever(Client()).search("budget! " * 100, frozenset({"finance"}))
+
+
+def test_embedding_defaults_use_free_multilingual_model_and_distinct_collection():
+    from knowledgellm.embedding import DEFAULT_COLLECTION
+    assert EMBEDDING_MODEL == "intfloat/multilingual-e5-small"
+    assert EMBEDDING_DIMENSIONS == 384
+    assert DEFAULT_COLLECTION == "knowledgellm-qdrant-multilingual-e5-small"

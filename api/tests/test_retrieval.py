@@ -26,6 +26,10 @@ def test_qdrant_query_receives_department_filter(monkeypatch) -> None:
         def __init__(self, **values):
             self.values = values
 
+    class Document:
+        def __init__(self, **values):
+            self.values = values
+
     class Client:
         received = None
 
@@ -34,11 +38,14 @@ def test_qdrant_query_receives_department_filter(monkeypatch) -> None:
             return SimpleNamespace(points=[])
 
     client = Client()
-    monkeypatch.setitem(sys.modules, "qdrant_client", SimpleNamespace(models=SimpleNamespace(Filter=Filter)))
-    retriever = QdrantRetriever(client, SimpleNamespace(embed=lambda _texts: [[0.1, 0.2]]))
+    monkeypatch.setitem(sys.modules, "qdrant_client", SimpleNamespace(models=SimpleNamespace(Filter=Filter, Document=Document)))
+    retriever = QdrantRetriever(client)
 
     assert retriever.search("budget", frozenset({"finance"})) == []
     assert client.received["query_filter"].values == {
         "must": [{"key": "department", "match": {"value": "finance"}}]
     }
     assert client.received["with_payload"] is True
+    assert client.received["query"].values == {
+        "text": "budget", "model": "intfloat/multilingual-e5-small"
+    }

@@ -7,9 +7,7 @@ from typing import Any
 
 from knowledgellm.documents import Language, list_documents, s3_client, source_key_for_id
 from knowledgellm.request_budget import require_time
-
-EMBEDDING_MODEL = "cohere.embed-multilingual-v3"
-DEFAULT_COLLECTION = "knowledgellm-cohere-v3"
+from knowledgellm.embedding import COLLECTION, EMBEDDING_MODEL
 
 
 class IndexUnavailable(Exception):
@@ -31,7 +29,7 @@ class S3IndexVersions:
     def __init__(self, bucket: str, client: Any = None, collection: str | None = None) -> None:
         self.bucket = bucket
         self.client = client if client is not None else s3_client()
-        self.collection = collection or os.getenv("QDRANT_COLLECTION", DEFAULT_COLLECTION)
+        self.collection = collection or os.getenv("QDRANT_COLLECTION", COLLECTION)
 
     def complete(self, document_id: str, version_id: str, chunk_count: int) -> None:
         self.client.put_object(

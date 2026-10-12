@@ -6,7 +6,9 @@ Permission-aware RAG demo for Finance, Operations, and People, with grounded cit
 
 **Frontend:** React 19 · TypeScript · Vite · Lucide React · IBM Plex · Vitest · Testing Library
 
-**Backend:** Python 3.12 · boto3 · Bedrock Cohere Multilingual v3 · Qdrant Cloud · Groq (`openai/gpt-oss-20b`) · pytest
+**Backend:** Python 3.12 · boto3 · Qdrant Cloud Inference (multilingual embeddings) · Qdrant Cloud · Groq (`openai/gpt-oss-20b`) · pytest
+
+The demo embeds both English and Traditional Chinese Markdown with Qdrant Cloud Inference's free `intfloat/multilingual-e5-small` model (384 dimensions). The existing English and translated sources stay in one new, model-specific collection.
 
 **Infra:** Cognito · API Gateway · Lambda · S3 · EventBridge · DynamoDB · Parameter Store · IAM · CloudWatch · Terraform · AWS SAM
 
@@ -29,7 +31,7 @@ CHAT / DOCUMENT ACCESS
                                           │                       │
                                          HIT                MISS / BYPASS
                                           │                       ▼
-                                          │     Bedrock Cohere (query vector)
+                                          │     Qdrant Cloud Inference (query vector)
                                           │                       │
                                           │                       ▼
                                           │     ┌────────────────────────────────────┐
@@ -46,7 +48,7 @@ CHAT / DOCUMENT ACCESS
                                         Answer + citations → UI
 
 INGESTION
-  S3 upload → EventBridge → Ingestion Lambda → Bedrock Cohere
+  S3 upload → EventBridge → Ingestion Lambda → Qdrant Cloud Inference
                                   ▲                  │ vectors
                                   │ read version     ▼
                                   S3 ◄── Manifest ── Qdrant Chunk DB
@@ -56,7 +58,7 @@ SUPPORTING SERVICES
   IAM → Scoped permissions · Terraform / SAM → AWS resources
 ```
 
-Cache: exactly 15 suggested questions, 24-hour TTL, disabled by default. Custom questions bypass caching; source-version changes invalidate earlier entries. [Operations guide](docs/cohere-demo-cache-operations.md).
+Cache: exactly 15 suggested questions, 24-hour TTL, disabled by default. Custom questions bypass caching; source-version changes invalidate earlier entries. [Operations guide](docs/qdrant-cloud-inference-operations.md).
 
 ## All-AWS Reference
 
