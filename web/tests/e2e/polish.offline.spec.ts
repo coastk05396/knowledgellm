@@ -12,29 +12,76 @@ async function mockExternalServices(page: Page) {
         : { AuthenticationResult: { AccessToken: "offline-fixture-token" } },
     });
   });
-  await page.route("**/api/**", async (route) => {
-    if (new URL(route.request().url()).pathname === "/api/documents") {
-      await route.fulfill({
-        json: {
-          documents: [
-            {
-              id: "finance-1",
-              title: "Q4 budget overview",
-              department: "finance",
-            },
-            { id: "finance-2", title: "Expense policy", department: "finance" },
-          ],
-        },
+  await page.route(
+    (url) => url.pathname.startsWith("/api/"),
+    async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/documents") {
+        await route.fulfill({
+          json: {
+            documents: [
+              {
+                id: "finance-1",
+                title: "Q4 budget overview",
+                department: "finance",
+              },
+              {
+                id: "finance-2",
+                title: "Expense policy",
+                department: "finance",
+              },
+            ],
+          },
+        });
+      } else {
+        await route.abort();
+      }
+    },
+  );
+}
+
+async function observeToastTransition(page: Page, closing: boolean) {
+  return page.evaluateHandle((closing) => {
+    // Capture on the DOM change: reduced-motion CSS transitions last only 80ms.
+    const frames = new Promise<
+      { property: string; frames: ComputedKeyframe[] }[]
+    >((resolve) => {
+      const observer = new MutationObserver(() => {
+        const toast = document.querySelector(".toast");
+        if (!toast || toast.classList.contains("closing") !== closing) return;
+        const animations = toast.getAnimations().map((animation) => ({
+          property:
+            animation instanceof CSSTransition
+              ? animation.transitionProperty
+              : "",
+          frames: (animation.effect as KeyframeEffect).getKeyframes(),
+        }));
+        observer.disconnect();
+        resolve(animations);
       });
-    } else {
-      await route.abort();
-    }
-  });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    });
+    return { frames };
+  }, closing);
 }
 
 test.beforeEach(async ({ page }) => {
+  const startupErrors: string[] = [];
+  page.on("pageerror", (error) => startupErrors.push(error.message));
+  page.on("requestfailed", (request) =>
+    startupErrors.push(`Failed resource: ${new URL(request.url()).pathname}`),
+  );
   await mockExternalServices(page);
   await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  expect(
+    startupErrors,
+    "The application should initialize without script errors",
+  ).toEqual([]);
   await expect(
     page.getByRole("button", { name: /another account: Alex/ }),
   ).toBeEnabled();
@@ -141,6 +188,7 @@ for (const reduced of [false, true]) {
       });
       await page.clock.install();
       await page.clock.pauseAt(new Date(Date.now() + 1000));
+      const entranceObservation = await observeToastTransition(page, false);
       await page.getByRole("button", { name: /another account: Alex/ }).click();
       const toast = page.locator(".toast");
       await expect(toast).toContainText("Alex signed in successfully");
@@ -149,15 +197,10 @@ for (const reduced of [false, true]) {
         "transition-duration",
         reduced ? "0.08s" : "0.18s, 0.18s",
       );
-      const entrance = await toast.evaluate((element) =>
-        element.getAnimations().map((animation) => ({
-          property:
-            animation instanceof CSSTransition
-              ? animation.transitionProperty
-              : "",
-          frames: (animation.effect as KeyframeEffect).getKeyframes(),
-        })),
+      const entrance = await entranceObservation.evaluate(
+        async ({ frames }) => frames,
       );
+      await entranceObservation.dispose();
       expect(
         entrance
           .find((animation) => animation.property === "opacity")
@@ -176,6 +219,7 @@ for (const reduced of [false, true]) {
         "transform",
         reduced ? "none" : "matrix(1, 0, 0, 1, 0, 0)",
       );
+      const exitObservation = await observeToastTransition(page, true);
       if (dismissal === "manual") {
         await page
           .getByRole("button", { name: "Dismiss notification" })
@@ -186,17 +230,10 @@ for (const reduced of [false, true]) {
       await expect(toast).toHaveClass(/closing/);
       await expect(toast).toHaveCSS(
         "transition-duration",
-        reduced ? "0.08s" : "0.14s, 0.14s",
+        reduced ? "0.08s" : "0.14s",
       );
-      const exit = await toast.evaluate((element) =>
-        element.getAnimations().map((animation) => ({
-          property:
-            animation instanceof CSSTransition
-              ? animation.transitionProperty
-              : "",
-          frames: (animation.effect as KeyframeEffect).getKeyframes(),
-        })),
-      );
+      const exit = await exitObservation.evaluate(async ({ frames }) => frames);
+      await exitObservation.dispose();
       expect(
         exit
           .find((animation) => animation.property === "opacity")

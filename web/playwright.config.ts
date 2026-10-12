@@ -26,8 +26,8 @@ export default defineConfig({
     ? undefined
     : {
         command:
-          "rtk npm exec vite -- --host 127.0.0.1 --port 5180 --strictPort",
-        url: "http://127.0.0.1:5180",
+          "rtk proxy npm exec vite -- --host 127.0.0.1 --port 5180 --strictPort",
+        wait: { stdout: /http:\/\/127\.0\.0\.1:5180/ },
         reuseExistingServer: false,
         env: {
           VITE_COGNITO_ISSUER:
