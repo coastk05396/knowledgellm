@@ -17,6 +17,10 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 
 ## Interface and Chat
 
+- Apply button hover styles only to fine pointers with hover support. Use subtle pointer press feedback (scale 0.985 over 120ms), preserve keyboard focus without scale animation, and replace press movement with opacity feedback for reduced motion.
+- Enter success toasts from the bottom over 180ms using opacity and an 8px translation; retain a closing phase for the 140ms reverse-path exit on dismissal or timeout. For reduced motion, use an 80ms opacity-only transition. Cancel pending timers on unmount or notification replacement.
+- Edge-to-edge and installed-phone support is not currently a target; defer `viewport-fit=cover` and expanded safe-area padding until that scope is selected and verified on a real phone.
+
 - Show `Loading...` in English and `讀取中...` in Traditional Chinese while department documents load; animate the three trailing dots in sequence while keeping a stable accessible status label, and disable animation for reduced motion. Use a compact 32px status row with 16px spacing before the folders.
 - Keep the graphite theme, department accents, responsive desktop/sidebar and mobile/accordion layouts, keyboard focus, reduced motion, descriptive icon labels, and 44px touch targets.
 - On mobile, fit all three compact persona cards without horizontal scrolling, including the active verification label. Place the question composer and access caption above the PII guardrail/token-cost panel; use compact line spacing and room for two input lines.
