@@ -9,12 +9,152 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Workspace } from "./App";
 import type { DocumentSummary } from "./api";
+import { DepartmentFolders } from "../components/DepartmentFolders";
 
 const session = { accessToken: "access", name: "Alex Morgan" };
+async function findPermittedDocument(name: string) {
+  const folder = await screen.findByRole("button", {
+    name: /— (Unlocked|已解鎖)$/,
+  });
+  await act(async () => {});
+  if (folder.getAttribute("aria-expanded") === "false") fireEvent.click(folder);
+  return screen.findByRole("button", { name });
+}
 afterEach(() => {
   vi.unstubAllGlobals();
   window.localStorage.clear();
 });
+it.each([
+  ["finance", "Finance / Alex"],
+  ["operations", "Operations / Sam"],
+  ["people", "People / Priya"],
+] as const)(
+  "keeps %s collapsed until clicked and resets after relocking",
+  (department, label) => {
+    const documents: DocumentSummary[] = [
+      { id: "source", title: "Permitted source", department },
+    ];
+    const onOpen = vi.fn();
+    const { rerender } = render(
+      <DepartmentFolders
+        documents={[]}
+        onOpen={onOpen}
+        loading={false}
+        authorizedListing={false}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: `${label} — restricted` }),
+    ).toBeDisabled();
+    rerender(
+      <DepartmentFolders
+        documents={documents}
+        onOpen={onOpen}
+        loading={false}
+        authorizedListing
+      />,
+    );
+    const folder = screen.getByRole("button", { name: `${label} — Unlocked` });
+    expect(folder).toBeEnabled();
+    expect(folder).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Permitted source" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(folder);
+    expect(folder).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Permitted source" }),
+    ).toBeVisible();
+    fireEvent.click(folder);
+    expect(folder).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(folder);
+    rerender(
+      <DepartmentFolders
+        documents={[]}
+        onOpen={onOpen}
+        loading={false}
+        authorizedListing={false}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: `${label} — restricted` }),
+    ).toHaveAttribute("aria-expanded", "false");
+    rerender(
+      <DepartmentFolders
+        documents={[...documents]}
+        onOpen={onOpen}
+        loading={false}
+        authorizedListing
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: `${label} — Unlocked` }),
+    ).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(
+      screen.getByRole("button", { name: `${label} — Unlocked` }),
+    );
+    const nextDepartment = department === "finance" ? "operations" : "finance";
+    const nextLabel =
+      nextDepartment === "operations" ? "Operations / Sam" : "Finance / Alex";
+    rerender(
+      <DepartmentFolders
+        documents={[
+          {
+            id: "next-source",
+            title: "Next permitted source",
+            department: nextDepartment,
+          },
+        ]}
+        onOpen={onOpen}
+        loading={false}
+        authorizedListing
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: `${nextLabel} — Unlocked` }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByRole("button", { name: `${label} — restricted` }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Next permitted source" }),
+    ).not.toBeInTheDocument();
+    expect(onOpen).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  ["finance", "Finance / Alex", "財務 / Alex"],
+  ["operations", "Operations / Sam", "營運 / Sam"],
+  ["people", "People / Priya", "人資 / Priya"],
+] as const)(
+  "keeps %s closed when the source language refreshes",
+  async (department, englishLabel, chineseLabel) => {
+    const api = {
+      loadDocuments: async () => [
+        { id: "source", title: "Permitted source", department },
+      ],
+      askQuestion: async () => ({ answer: "", citations: [] }),
+      openDocument: async () => "https://docs.example.com/source.md",
+    };
+    render(<Workspace session={session} onSwitch={async () => {}} api={api} />);
+    const folder = await screen.findByRole("button", {
+      name: `${englishLabel} — Unlocked`,
+    });
+    fireEvent.click(folder);
+    expect(folder).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "CH" }));
+    const refreshed = await screen.findByRole("button", {
+      name: `${chineseLabel} — 已解鎖`,
+    });
+    expect(refreshed).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Permitted source" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(refreshed);
+    expect(refreshed).toHaveAttribute("aria-expanded", "true");
+  },
+);
 describe("Authorized knowledge workspace", () => {
   it.each([
     ["finance", "Alex", "Finance"],
@@ -46,11 +186,21 @@ describe("Authorized knowledge workspace", () => {
       ).toHaveLength(3);
       expect(screen.queryByText("Unlocked")).not.toBeInTheDocument();
 
-      resolveDocuments([
-        { id: "source", title: "Permitted source", department },
-      ]);
+      await act(async () => {
+        resolveDocuments([
+          { id: "source", title: "Permitted source", department },
+        ]);
+      });
+      const permittedFolder = await screen.findByRole("button", {
+        name: `${label} / ${name} — Unlocked`,
+      });
+      expect(permittedFolder).toHaveAttribute("aria-expanded", "false");
       expect(
-        await screen.findByRole("button", { name: "Permitted source" }),
+        screen.queryByRole("button", { name: "Permitted source" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(permittedFolder);
+      expect(
+        screen.getByRole("button", { name: "Permitted source" }),
       ).toBeVisible();
       const identity = screen.getByRole("button", {
         name: `Sign in as another account: ${name}, ${label}`,
@@ -134,9 +284,7 @@ describe("Authorized knowledge workspace", () => {
         }}
       />,
     );
-    expect(
-      await screen.findByRole("button", { name: "Q4 budget overview" }),
-    ).toBeVisible();
+    expect(await findPermittedDocument("Q4 budget overview")).toBeVisible();
     expect(screen.queryByText("Employee handbook")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Operations.*restricted/i }),
@@ -195,7 +343,7 @@ describe("Authorized knowledge workspace", () => {
         }}
       />,
     );
-    await screen.findByRole("button", { name: "Q4 budget overview" });
+    await findPermittedDocument("Q4 budget overview");
     fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
       target: { value: "What changed?" },
     });
@@ -257,7 +405,7 @@ it("clears protected content immediately when account switching begins", async (
       }}
     />,
   );
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   fireEvent.click(
     screen.getByRole("button", {
       name: "Sign in as another account: Sam, Operations",
@@ -296,9 +444,7 @@ it("displays source and provider failures without rendering internal details", a
       }}
     />,
   );
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Q4 budget overview" }),
-  );
+  fireEvent.click(await findPermittedDocument("Q4 budget overview"));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "source could not be opened",
   );
@@ -341,7 +487,7 @@ it("rejects answers whose citations are outside the authorized listing", async (
       }}
     />,
   );
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
     target: { value: "What changed?" },
   });
@@ -386,7 +532,7 @@ it("opens a citation in a separate tab so the active conversation stays open", a
       }}
     />,
   );
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
     target: { value: "What changed?" },
   });
@@ -436,7 +582,7 @@ it("retains session cost after a response without an estimate and resets on new 
       }}
     />,
   );
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   for (const [question, answer] of [
     ["Budget?", "Budget answer"],
     ["Private details", "Remove personal details"],
@@ -474,16 +620,14 @@ it("switches to Traditional Chinese and sends the language without changing acce
       }}
     />,
   );
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   fireEvent.click(screen.getByRole("button", { name: "CH" }));
   expect(document.documentElement.lang).toBe("zh-TW");
   expect(screen.getByRole("button", { name: "CH" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  expect(
-    await screen.findByRole("button", { name: "第四季預算概覽" }),
-  ).toBeVisible();
+  expect(await findPermittedDocument("第四季預算概覽")).toBeVisible();
   expect(screen.getByRole("button", { name: /營運.*受限/ })).toBeDisabled();
   fireEvent.click(
     screen.getByRole("button", { name: "第四季核准的總預算是多少？" }),
@@ -538,7 +682,7 @@ it("reloads source language and ignores outdated lists while retaining the conve
     openDocument: async () => "https://docs.example.com/source.md",
   };
   render(<Workspace session={session} onSwitch={async () => {}} api={api} />);
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
     target: { value: "Budget?" },
   });
@@ -548,7 +692,7 @@ it("reloads source language and ignores outdated lists while retaining the conve
   expect(screen.getByText("Existing answer")).toBeVisible();
   expect(screen.getByRole("textbox", { name: "您的問題" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "EN" }));
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   await act(async () => {
     resolveChinese([
       { id: "stale", title: "Stale Chinese source", department: "finance" },
@@ -595,11 +739,9 @@ it("closes a pending source and ignores its URL when the language changes", asyn
       }}
     />,
   );
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Q4 budget overview" }),
-  );
+  fireEvent.click(await findPermittedDocument("Q4 budget overview"));
   fireEvent.click(screen.getByRole("button", { name: "CH" }));
-  await screen.findByRole("button", { name: "第四季預算概覽" });
+  await findPermittedDocument("第四季預算概覽");
   await act(async () => {
     resolveUrl("https://docs.example.com/source.md");
   });
@@ -646,14 +788,14 @@ it("uses the current document locale for a Chinese answer's citation when switch
       }}
     />,
   );
-  await screen.findByRole("button", { name: "第四季預算概覽" });
+  await findPermittedDocument("第四季預算概覽");
   fireEvent.change(screen.getByRole("textbox", { name: "您的問題" }), {
     target: { value: "核准預算是多少？" },
   });
   fireEvent.click(screen.getByRole("button", { name: "傳送問題" }));
   await screen.findByRole("button", { name: "來源： 第四季預算概覽" });
   fireEvent.click(screen.getByRole("button", { name: "EN" }));
-  await screen.findByRole("button", { name: "Q4 budget overview" });
+  await findPermittedDocument("Q4 budget overview");
   const citation = screen.getByRole("button", {
     name: "Source: Q4 budget overview",
   });
@@ -736,7 +878,7 @@ it.each(guardrailExamples)(
         }}
       />,
     );
-    await screen.findByRole("button", { name: "Authorized source" });
+    await findPermittedDocument("Authorized source");
     const region = screen.getByRole("region", {
       name: /suggested questions|建議問題/,
     });

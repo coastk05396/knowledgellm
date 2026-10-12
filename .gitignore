@@ -3,6 +3,8 @@
 node_modules/
 web/dist/
 web/.vite/
+web/test-results/
+web/playwright-report/
 web/.env
 web/.env.local
 web/.env.*.local

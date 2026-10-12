@@ -21,12 +21,11 @@ export function DepartmentFolders({
   authorizedListing: boolean;
 }) {
   const { t } = useLanguage();
-  const [closed, setClosed] = useState<string[]>([]);
+  const [expandedDepartments, setExpandedDepartments] = useState<string[]>([]);
 
   useEffect(() => {
-    // Auto-expand newly permitted folders when documents change
-    setClosed([]);
-  }, [documents]);
+    setExpandedDepartments([]);
+  }, [documents, authorizedListing]);
   return (
     <section className="folders" aria-labelledby="folders-title">
       <div className="folder-heading">
@@ -55,7 +54,8 @@ export function DepartmentFolders({
             (doc) => doc.department === person.department,
           );
           const permitted = authorizedListing && docs.length > 0;
-          const expanded = permitted && !closed.includes(person.department);
+          const expanded =
+            permitted && expandedDepartments.includes(person.department);
           return (
             <div
               key={person.department}
@@ -68,7 +68,7 @@ export function DepartmentFolders({
                 aria-expanded={expanded}
                 aria-controls={`files-${person.department}`}
                 onClick={() =>
-                  setClosed((current) =>
+                  setExpandedDepartments((current) =>
                     current.includes(person.department)
                       ? current.filter((d) => d !== person.department)
                       : [...current, person.department],
@@ -76,8 +76,10 @@ export function DepartmentFolders({
                 }
               >
                 <Folder />
-                <strong>
-                  {t(person.label)} / {person.name}
+                <strong className="folder-label">
+                  <span className="folder-name">
+                    {t(person.label)} / {person.name}
+                  </span>
                   {permitted && (
                     <span className="folder-unlocked">{t("Unlocked")}</span>
                   )}
