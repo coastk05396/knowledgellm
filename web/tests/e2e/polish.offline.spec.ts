@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function mockExternalServices(page: Page) {
+async function mockExternalServices(
+  page: Page,
+  department: "finance" | "operations" = "finance",
+) {
   await page.route("https://cognito-idp.*.amazonaws.com/**", async (route) => {
     const initiating = route
       .request()
@@ -22,12 +25,12 @@ async function mockExternalServices(page: Page) {
               {
                 id: "finance-1",
                 title: "Q4 budget overview",
-                department: "finance",
+                department,
               },
               {
                 id: "finance-2",
                 title: "Expense policy",
-                department: "finance",
+                department,
               },
             ],
           },
@@ -96,6 +99,70 @@ for (const width of [320, 390, 768, 1440]) {
       scrollWidth: document.documentElement.scrollWidth,
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
+  });
+}
+
+for (const width of [320, 390, 1440]) {
+  test(`unlocked folder label stays grouped at ${width}px and opens only on click`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockExternalServices(page, "operations");
+    await page.getByRole("button", { name: /another account: Sam/ }).click();
+    const folder = page.locator(".folder-group.operations .folder-button");
+    await expect(folder).toBeEnabled();
+    await expect(folder).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#files-operations")).toBeHidden();
+    for (const language of ["EN", "CH"] as const) {
+      await page.getByRole("button", { name: language, exact: true }).click();
+      await expect(folder).toBeEnabled();
+      await expect(folder).toHaveAttribute("aria-expanded", "false");
+      const name = folder.locator(".folder-name");
+      const status = folder.locator(".folder-unlocked");
+      await expect(name).toHaveText(
+        language === "EN" ? "Operations / Sam" : "營運 / Sam",
+      );
+      await expect(status).toHaveText(
+        language === "EN" ? "Unlocked" : "已解鎖",
+      );
+      await expect(name).toHaveCSS("white-space", "nowrap");
+      const layout = await folder.evaluate((element) => {
+        const name = element.querySelector(".folder-name")!;
+        const status = element.querySelector(".folder-unlocked")!;
+        const nameBox = name.getBoundingClientRect();
+        const statusBox = status.getBoundingClientRect();
+        return {
+          nameLeft: nameBox.left,
+          nameBottom: nameBox.bottom,
+          statusLeft: statusBox.left,
+          statusTop: statusBox.top,
+          nameFontSize: parseFloat(getComputedStyle(name).fontSize),
+          statusFontSize: parseFloat(getComputedStyle(status).fontSize),
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        };
+      });
+      expect(layout.statusLeft).toBeCloseTo(layout.nameLeft, 1);
+      expect(layout.statusTop).toBeGreaterThanOrEqual(layout.nameBottom);
+      expect(layout.statusFontSize).toBeLessThan(layout.nameFontSize);
+      expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+    }
+    await folder.click();
+    await expect(folder).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#files-operations button:visible")).toHaveCount(
+      2,
+    );
+    await folder.click();
+    await expect(page.locator("#files-operations")).toBeHidden();
+    await folder.focus();
+    await folder.press("Space");
+    await expect(folder).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#files-operations button:visible")).toHaveCount(
+      2,
+    );
+    await folder.press("Enter");
+    await expect(folder).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#files-operations")).toBeHidden();
   });
 }
 

@@ -32,6 +32,9 @@ test("public preview loads only each persona's authorized documents", async ({
       );
       if (folder.department === persona.department) {
         await expect(button).toBeEnabled();
+        await expect(button).toHaveAttribute("aria-expanded", "false");
+        await expect(page.locator(`#files-${folder.department}`)).toBeHidden();
+        await button.click();
         await expect(button).toHaveAttribute("aria-expanded", "true");
         await expect(
           page.locator(`#files-${folder.department} button`),
@@ -46,5 +49,11 @@ test("public preview loads only each persona's authorized documents", async ({
       }
     }
     await expect(page.locator(".files button:visible")).toHaveCount(2);
+    const selected = page.locator(
+      `.folder-group.${persona.department} .folder-button`,
+    );
+    await selected.click();
+    await expect(selected).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator(`#files-${persona.department}`)).toBeHidden();
   }
 });

@@ -14,7 +14,7 @@ rtk npm run test:e2e:types
 
 The default suite starts a loopback Vite server on port 5180 and uses mocked
 authentication/document responses. It checks responsive overflow, pointer press
-feedback, keyboard activation, touch hover gating, and toast entry/exit with
+feedback, keyboard activation, touch hover gating, folder label alignment and click-to-expand behavior, and toast entry/exit with
 normal or reduced motion. It does not establish live authentication or API access.
 
 To check a running preview against real Cognito and the real document API:
