@@ -36,6 +36,10 @@ def test_snapshot_contains_only_authorized_documents_and_changes_on_update():
     snapshot = versions.current(frozenset({"finance"}))
     assert set(snapshot.versions) == {"finance-expense-policy", "finance-q4-budget-overview"}
     assert all(key.startswith("finance/") for key in storage.heads)
+    manifest = json.loads(storage.manifests[manifest_key(versions.collection, "finance-expense-policy", "v1")])
+    assert manifest["sparse_model"] == "Qdrant/bm25"
+    assert manifest["retrieval"] == "hybrid-rrf-v1"
+    assert manifest["vector_schema"] == {"dense": 384, "sparse": "bm25"}
     assert S3IndexVersions("bucket", storage).current(frozenset({"finance"})).fingerprint == snapshot.fingerprint
     storage.version = "v2"
     assert not versions.is_current(snapshot, frozenset({"finance"}))
@@ -46,7 +50,11 @@ def test_snapshot_contains_only_authorized_documents_and_changes_on_update():
     assert versions.current(frozenset({"finance"})).fingerprint != snapshot.fingerprint
 
 
-@pytest.mark.parametrize("field,value", [("model", "legacy-model"), ("collection", "legacy"), ("version_id", "old"), ("chunk_count", -1)])
+@pytest.mark.parametrize("field,value", [
+    ("model", "legacy-model"), ("collection", "legacy"), ("sparse_model", "legacy-model"),
+    ("retrieval", "dense-v1"), ("vector_schema", {"dense": 384}),
+    ("version_id", "old"), ("chunk_count", -1),
+])
 def test_incompatible_completion_manifest_fails_closed(field, value):
     storage, versions = indexed()
     key = manifest_key(versions.collection, "finance-expense-policy", "v1")

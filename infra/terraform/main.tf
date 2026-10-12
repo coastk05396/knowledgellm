@@ -27,6 +27,7 @@ resource "aws_ssm_parameter" "qdrant_api_key" {
 
 locals {
   lambda_package     = abspath("${path.module}/${var.lambda_package_path}")
+  qdrant_collection  = "knowledgellm-qdrant-hybrid-e5-small"
   cognito_issuer     = "https://cognito-idp.${var.aws_region}.${data.aws_partition.current.dns_suffix}/${aws_cognito_user_pool.users.id}"
   qdrant_api_key_arn = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
   groq_api_key_arn   = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
@@ -37,7 +38,7 @@ locals {
     DOCUMENTS_BUCKET                 = aws_s3_bucket.documents.id
     QDRANT_URL                       = var.qdrant_url
     QDRANT_API_KEY_SECRET_ARN        = local.qdrant_api_key_arn
-    QDRANT_COLLECTION                = "knowledgellm-qdrant-multilingual-e5-small"
+    QDRANT_COLLECTION                = local.qdrant_collection
     EMBEDDING_MODEL                  = "intfloat/multilingual-e5-small"
     GROQ_API_KEY_SECRET_ARN          = local.groq_api_key_arn
     GROQ_MODEL                       = var.groq_model
@@ -49,7 +50,7 @@ locals {
     DOCUMENTS_BUCKET          = aws_s3_bucket.documents.id
     QDRANT_URL                = var.qdrant_url
     QDRANT_API_KEY_SECRET_ARN = local.qdrant_api_key_arn
-    QDRANT_COLLECTION         = "knowledgellm-qdrant-multilingual-e5-small"
+    QDRANT_COLLECTION         = local.qdrant_collection
     EMBEDDING_MODEL           = "intfloat/multilingual-e5-small"
   }
   lambda_trust_policy = jsonencode({
@@ -248,7 +249,7 @@ resource "aws_iam_role_policy" "ingestion" {
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.documents.arn}/_indexes/knowledgellm-qdrant-multilingual-e5-small/*"
+        Resource = "${aws_s3_bucket.documents.arn}/_indexes/${local.qdrant_collection}/*"
       },
       {
         Effect   = "Allow"

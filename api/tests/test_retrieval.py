@@ -30,6 +30,17 @@ def test_qdrant_query_receives_department_filter(monkeypatch) -> None:
         def __init__(self, **values):
             self.values = values
 
+    class Prefetch:
+        def __init__(self, **values):
+            self.__dict__.update(values)
+
+    class FusionQuery:
+        def __init__(self, **values):
+            self.__dict__.update(values)
+
+    class Fusion:
+        RRF = "rrf"
+
     class Client:
         received = None
 
@@ -38,14 +49,21 @@ def test_qdrant_query_receives_department_filter(monkeypatch) -> None:
             return SimpleNamespace(points=[])
 
     client = Client()
-    monkeypatch.setitem(sys.modules, "qdrant_client", SimpleNamespace(models=SimpleNamespace(Filter=Filter, Document=Document)))
+    monkeypatch.setitem(sys.modules, "qdrant_client", SimpleNamespace(models=SimpleNamespace(
+        Filter=Filter, Document=Document, Prefetch=Prefetch, FusionQuery=FusionQuery, Fusion=Fusion,
+    )))
     retriever = QdrantRetriever(client)
 
     assert retriever.search("budget", frozenset({"finance"})) == []
-    assert client.received["query_filter"].values == {
+    department_filter_values = {
         "must": [{"key": "department", "match": {"value": "finance"}}]
     }
     assert client.received["with_payload"] is True
-    assert client.received["query"].values == {
+    assert client.received["query"].fusion == Fusion.RRF
+    dense, sparse = client.received["prefetch"]
+    assert (dense.using, sparse.using) == ("dense", "bm25")
+    assert dense.filter.values == sparse.filter.values == department_filter_values
+    assert dense.query.values == {
         "text": "budget", "model": "intfloat/multilingual-e5-small"
     }
+    assert sparse.query.values == {"text": "budget", "model": "Qdrant/bm25"}

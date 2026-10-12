@@ -1,6 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: KnowledgeLLM permission-aware knowledge assistant prototype
+Description: Permission-aware KnowledgeLLM assistant — uses isolated hybrid retrieval with server-side BM25 and retains the dense collection for rollback.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: Cognito-authorized chat and S3 ingestion Lambdas -> Qdrant Cloud hybrid retrieval -> Groq grounded answers; DynamoDB caches fixed demo questions.
+    must:
+      - Chat and ingestion use the same hybrid collection and manifest identity.
+      - Keep answer caching disabled until hybrid indexing and chat cutover are verified.
+      - Preserve the existing dense collection for rollback; never mix vector schemas.
+    ref:
+      - at: docs/qdrant-cloud-inference-operations.md
+        has: Hybrid collection migration, verification, cache gating, and rollback procedures
+        scope: operations
 
 Parameters:
   AnswerCacheEnabled:
@@ -64,7 +78,7 @@ Globals:
         DOCUMENTS_BUCKET: !Ref DocumentsBucket
         QDRANT_URL: !Ref QdrantUrl
         QDRANT_API_KEY_SECRET_ARN: !Ref QdrantApiKeySecretArn
-        QDRANT_COLLECTION: knowledgellm-qdrant-multilingual-e5-small
+        QDRANT_COLLECTION: knowledgellm-qdrant-hybrid-e5-small
         EMBEDDING_MODEL: intfloat/multilingual-e5-small
         GROQ_API_KEY_SECRET_ARN: !Ref GroqApiKeySecretArn
         GROQ_MODEL: !Ref GroqModel
@@ -312,7 +326,7 @@ Resources:
               Resource: !Ref QdrantApiKeySecretArn
             - Effect: Allow
               Action: s3:PutObject
-              Resource: !Sub '${DocumentsBucket.Arn}/_indexes/knowledgellm-qdrant-multilingual-e5-small/*'
+              Resource: !Sub '${DocumentsBucket.Arn}/_indexes/knowledgellm-qdrant-hybrid-e5-small/*'
       Events:
         ObjectCreated:
           Type: EventBridgeRule

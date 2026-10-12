@@ -3,6 +3,7 @@ import {
   LanguageProvider,
   LanguageSwitch,
   useLanguage,
+  type Language,
 } from "./language";
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "lucide-react";
@@ -34,6 +35,11 @@ function WorkspaceContent({
 }: WorkspaceProps) {
   const { t, language } = useLanguage();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
+  const [documentsLoadedFor, setDocumentsLoadedFor] = useState<{
+    session: Session;
+    language: Language;
+    api: KnowledgeApi;
+  } | null>(null);
   const [loading, setLoading] = useState(Boolean(session));
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,6 +69,7 @@ function WorkspaceContent({
       pendingSourceWindows.current.forEach((source) => source.close());
       pendingSourceWindows.current.clear();
     };
+    setDocumentsLoadedFor(null);
     if (!session) {
       setLoading(false);
       return invalidate;
@@ -71,8 +78,10 @@ function WorkspaceContent({
     api
       .loadDocuments(session.accessToken, language)
       .then((docs) => {
-        if (active && generation === documentGeneration.current)
+        if (active && generation === documentGeneration.current) {
           setDocuments(docs);
+          setDocumentsLoadedFor({ session, language, api });
+        }
       })
       .catch(() => {
         if (active && generation === documentGeneration.current)
@@ -91,6 +100,12 @@ function WorkspaceContent({
       documents.some((doc) => doc.department === person.department),
     )
     .map((person) => person.department);
+  const authorizedListing = Boolean(
+    session &&
+    documentsLoadedFor?.session === session &&
+    documentsLoadedFor.language === language &&
+    documentsLoadedFor.api === api,
+  );
   const name = t(session?.name ?? "Guest");
   const access = identities
     .filter((person) => departments.includes(person.department))
@@ -195,6 +210,7 @@ function WorkspaceContent({
             void openDocument(id);
           }}
           loading={loading}
+          authorizedListing={authorizedListing}
         />
         <div className="desktop-monitor">
           <SystemMonitor

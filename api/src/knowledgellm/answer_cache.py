@@ -9,14 +9,18 @@ from importlib.resources import files
 from typing import Any, Protocol
 
 from knowledgellm.chat import ChatAnswer, Citation, Language
-from knowledgellm.embedding import DEFAULT_COLLECTION, DEFAULT_EMBEDDING_MODEL
+from knowledgellm.embedding import (
+    DEFAULT_COLLECTION,
+    DEFAULT_EMBEDDING_MODEL,
+    RETRIEVAL_VERSION,
+    SPARSE_MODEL,
+)
 from knowledgellm.request_budget import require_time
 
-CACHE_TTL_SECONDS = 86_400
+CACHE_TTL_SECONDS = 300
 # Bump these when the prompt, guardrail rules, or retrieval behavior changes.
 PROMPT_VERSION = "sources-json-language-v2"
 GUARDRAIL_VERSION = "basic-pii-v1"
-RETRIEVAL_VERSION = "qdrant-cloud-inference-v1"
 
 
 class AnswerCache(Protocol):
@@ -42,6 +46,7 @@ def cache_key(question_id: str, departments: frozenset[str], index_fingerprint: 
         "departments": sorted(departments),
         "index": index_fingerprint,
         "embedding_model": os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
+        "sparse_embedding_model": SPARSE_MODEL,
         "generation_model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
         "collection": os.getenv("QDRANT_COLLECTION", DEFAULT_COLLECTION),
         "prompt": PROMPT_VERSION,

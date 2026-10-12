@@ -271,6 +271,12 @@ h2 {
   font-size: 15px;
   font-weight: 600;
 }
+.folder-unlocked {
+  margin-left: 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
 .folder-button:disabled {
   opacity: 0.65;
 }
@@ -475,6 +481,25 @@ h2 {
 }
 .assistant-message {
   margin-top: 25px;
+}
+.assistant-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.assistant-meta .message-label {
+  margin: 0;
+}
+.cache-hit {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 13%, var(--canvas));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .assistant-icon {
   display: grid;

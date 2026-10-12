@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ChatPanel } from "./ChatPanel";
+import { LanguageProvider, LanguageSwitch } from "../app/language";
 
 describe("ChatPanel pending status", () => {
   it("announces a stable status while pending and clears it when finished", () => {
@@ -43,5 +44,66 @@ describe("ChatPanel pending status", () => {
         name: "How quickly must a P1 incident be acknowledged?",
       }),
     ).toBeEnabled();
+  });
+});
+
+describe("ChatPanel cache status", () => {
+  const props = {
+    documents: [],
+    name: "Sam",
+    departments: ["operations" as const],
+    messages: [
+      {
+        question: "Question",
+        response: {
+          answer: "Answer",
+          citations: [],
+          cache_status: "hit" as const,
+        },
+      },
+    ],
+    busy: false,
+    signedIn: true,
+    onNew: () => {},
+    onOpen: () => {},
+    onSuggestion: () => {},
+  };
+
+  it("shows an accessible badge only for an explicit cache hit", () => {
+    const { rerender } = render(<ChatPanel {...props} />);
+    const badge = screen.getByRole("status", { name: "Cached Hit" });
+    expect(badge).toBeVisible();
+    expect(badge.closest(".assistant-meta")).toContainElement(
+      screen.getByText("KnowledgeLLM assistant"),
+    );
+
+    rerender(
+      <ChatPanel
+        {...props}
+        messages={[
+          {
+            ...props.messages[0],
+            response: {
+              ...props.messages[0].response,
+              cache_status: "miss" as const,
+            },
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText("Cached Hit")).not.toBeInTheDocument();
+  });
+
+  it("translates the cache badge to Traditional Chinese", () => {
+    render(
+      <LanguageProvider>
+        <>
+          <LanguageSwitch />
+          <ChatPanel {...props} />
+        </>
+      </LanguageProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "CH" }));
+    expect(screen.getByRole("status", { name: "快取命中" })).toBeVisible();
   });
 });

@@ -1,37 +1,50 @@
-# Qdrant Cloud Inference and Demo Answer Cache Operations
+# Qdrant Hybrid Search and Demo Cache Operations
 
-This is a staged implementation guide; it does not deploy or migrate production. Requirements are maintained in [PROMTS.md](../PROMTS.md#qdrant-cloud-inference-and-fixed-demo-answer-cache).
+This guide describes the rollout and rollback for the hybrid retrieval implementation. The deployed dense-only collection remains intact as the rollback target. All vector and answer-cache fingerprints are tied to the hybrid collection and retrieval version.
 
-## Selected provider configuration
+## Runtime configuration
 
-The ZIP Lambdas send English and Traditional Chinese document/query text to Qdrant Cloud Inference using the free multilingual `intfloat/multilingual-e5-small` model (384 dimensions) and the separate `knowledgellm-qdrant-multilingual-e5-small` collection. Qdrant Cloud Inference automatically applies the model's query and passage prefixes. Groq remains the answer-generation provider. The old collection is preserved for rollback; vectors from different models must never be mixed.
+Chat and ingestion use `knowledgellm-qdrant-hybrid-e5-small`, with a named 384-dimensional cosine dense vector from `intfloat/multilingual-e5-small` and a server-side `Qdrant/bm25` sparse vector using IDF. Retrieval submits both named vectors as filtered prefetches and fuses their rankings with RRF. Both prefetches carry the same authorized department and immutable source-version filters. Groq remains the answer-generation provider.
 
-Enable Cloud Inference in the cluster's Qdrant Cloud Console before testing. The screenshot showed a managed Free cluster in `us-east-1`; Qdrant lists multilingual E5 small as free on free-tier clusters. Free model inference is hosted in the US. This demo uses fictional documents only. Check Qdrant's [current model and region details](https://qdrant.tech/documentation/cloud/inference/) before using another plan or data class.
+The twelve fictional Markdown objects (six English and six Traditional Chinese) are indexed into this new collection. The existing dense-only collection stays available and is never reused for hybrid vectors. Verify that the current Qdrant cluster supports the two inference models and hybrid Query API before indexing; the account's model/cluster plan may affect availability and cost.
 
-The 24-hour DynamoDB answer cache remains disabled until the new index is verified. It only stores grounded answers for the 15 exact trimmed suggested questions. Cache hits still check current S3 versions and DynamoDB and incur applicable AWS request/storage costs.
+## In-place migration and cutover
 
-## Staged index migration
+Use the existing ingestion Lambda and existing Qdrant cluster; do not create another Lambda or delete the old collection. Keep chat pointed at its current dense-only collection while indexing. The cache remains disabled until chat cutover is verified.
 
-1. Obtain separate deployment approval. Preserve the currently deployed ZIP and collection for rollback. Do not apply the full Terraform cutover before indexing the new collection.
-2. Enable Qdrant Cloud Inference on the managed cluster. Build and deploy the new package to a temporary ingestion Lambda configured with `QDRANT_COLLECTION=knowledgellm-qdrant-multilingual-e5-small`, `EMBEDDING_MODEL=intfloat/multilingual-e5-small`, the source bucket, and the existing Qdrant/Groq secret references. Keep the currently deployed chat and ingestion Lambdas intact.
-3. Preview the twelve-object migration offline (six English files and six `-ch.md` translations). This script uses AWS CLI and does not require local boto3:
+1. Build the ZIP package and deploy it to the existing ingestion Lambda only. Keep the existing knowledge Lambda package and configuration untouched during indexing: its current code validates the old dense-only manifests, while the hybrid code requires hybrid manifests. Do not run a normal full Terraform or SAM deployment before migration and evaluation pass.
+
+   Use the same account-specific Terraform variable inputs as the normal deployment. First review the targeted plan and confirm that it updates the Lambda artifact and ingestion function only; then apply that saved plan:
+
+   ```sh
+   rtk bash scripts/package-lambdas.sh
+   rtk terraform -chdir=infra/terraform plan \
+     -target=aws_lambda_function.ingestion \
+     -out=/tmp/knowledgellm-ingestion.tfplan \
+     -var-file=terraform.tfvars
+   rtk terraform -chdir=infra/terraform show /tmp/knowledgellm-ingestion.tfplan
+   rtk terraform -chdir=infra/terraform apply /tmp/knowledgellm-ingestion.tfplan
+   ```
+
+   If the local variable file has a different name, pass that file instead. The targeted apply is only for this staging phase; do not use it as a substitute for the final full plan review.
+2. Preview the twelve-object migration offline. This script uses the AWS CLI and does not require local boto3:
 
    ```sh
    rtk python3.12 scripts/migrate-qdrant-inference-index.py \
      --bucket "$DOCUMENTS_BUCKET" \
-     --function "$STAGED_INGESTION_FUNCTION"
+     --function "$INGESTION_FUNCTION"
    ```
 
-   After deployment approval, add `--execute`. The script reads current S3 VersionIds, invokes only the staged Lambda, verifies each completion manifest and source version, and never writes source objects or touches the old collection.
-4. Verify all twelve current S3 versions are indexed in the 384-dimensional collection with department, document, and source-version payload indexes. Test all 15 catalog questions in English and Traditional Chinese, grounded citations, source masking, and department isolation on staging while the cache remains disabled.
-5. Apply a reviewed Terraform/SAM cutover for chat and ingestion together. Keep answer caching disabled until the staged checks pass; then enable `ANSWER_CACHE_ENABLED=true` through a separate reviewed deployment. Test cache hits from separate Lambda environments and confirm they skip Qdrant and Groq.
-
-Completion manifests use `_indexes/{collection}/{document_id}/{sha256(version_id)}.json`. If a source changes mid-migration, rerun the migration before cutover. Ingestion events only match the approved department prefixes, so manifest writes do not retrigger ingestion.
+   After the targeted ingestion deployment is verified, add `--execute`. The script reads current S3 VersionIds, invokes the existing ingestion Lambda for each approved object, and verifies each completion manifest's collection, source version, dense model, sparse model, vector schema, and retrieval version. It also confirms that source VersionIds remained unchanged. It does not upload source objects, write to the old collection, or expose document content in its output.
+3. Confirm all twelve manifests under `_indexes/knowledgellm-qdrant-hybrid-e5-small/`. The ingestion Lambda's collection validation must reject missing or mismatched named vectors; a completion manifest is written only after all chunks for that S3 version are indexed.
+4. Evaluate all 15 demo questions in English and Traditional Chinese. Check supporting sources, citations, PII masking, authorized department isolation, exact source-version filtering, split-query handling, and rankings against the dense-only baseline. Do not claim a retrieval improvement until the same reviewed relevance set has been compared.
+5. After indexing and evaluation pass, run and inspect a full Terraform plan using the account's normal variable inputs. Apply only if it updates the existing knowledge function to the hybrid collection without replacing unrelated resources. This is the first step that updates the knowledge Lambda package and collection; it also reconciles ingestion with the same hybrid configuration. The old collection remains untouched for rollback.
+6. Enable `ANSWER_CACHE_ENABLED=true` in that reviewed final plan only after chat cutover checks pass. The on-demand DynamoDB cache stores eligible answers for exactly the 15 trimmed catalog questions, partitioned by complete department scope, language, source-version fingerprint, dense/sparse models, collection, prompt/guardrail, and hybrid retrieval version. Items are logically expired after 300 seconds; read-time expiry is authoritative because DynamoDB TTL deletion is asynchronous. Cache hits still check current S3 versions, DynamoDB, PII, and citation permissions and incur applicable AWS request/storage costs. Custom questions bypass caching.
 
 ## Rollback
 
-Disable answer caching first if cache behavior is suspect. Restore the saved previous Lambda package and its matching collection/configuration for both chat and ingestion. Keep the new collection and manifests for investigation until cleanup is separately decided. Re-index later S3 document versions with the restored embedding path before relying on the old collection. Never mix the old and new embedding vectors.
+Disable answer caching first if cache behavior is suspect. Restore the prior Lambda package and matching dense-only collection/configuration for both chat and ingestion. Keep the hybrid collection and manifests while investigating; cleanup requires a separate decision. Re-index later source versions through the restored dense-only path before relying on it. Never mix dense-only and hybrid vectors or serve a cache entry fingerprinted for another retrieval version.
 
 ## Verification status
 
-Automated test/build and infrastructure validation results for this implementation are recorded in [product development](product-development.md). Live Qdrant inference, twelve-object indexing, bilingual retrieval-quality checks, and production deployment remain pending separate rollout approval.
+Local implementation tests and infrastructure validation should be recorded in [product development](product-development.md). Live Qdrant inference, twelve-object indexing, bilingual retrieval-quality checks, cache-hit verification, and production deployment require runtime evidence from the deployed account; code-level checks alone do not establish those results.

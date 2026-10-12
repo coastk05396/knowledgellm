@@ -47,6 +47,8 @@ def test_index_migration_dry_run_uses_twelve_markdown_sources(monkeypatch, capsy
     assert json.loads(capsys.readouterr().out) == {
         "mode": "dry_run",
         "documents": 12,
-        "collection": "knowledgellm-qdrant-multilingual-e5-small",
+        "collection": "knowledgellm-qdrant-hybrid-e5-small",
         "model": "intfloat/multilingual-e5-small",
+        "sparse_model": "Qdrant/bm25",
+        "retrieval": "hybrid-rrf-v1",
     }
