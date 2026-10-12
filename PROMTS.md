@@ -82,7 +82,7 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 - [ ] Deploy the frontend to Cloudflare Pages using README setup instructions; configure public frontend variables and matching API CORS/authentication origins.
 - [ ] Attach the custom domain and verify DNS, HTTPS, sign-in, source links, and cited chat.
 - [ ] Run the remaining acceptance checks above; inspect CloudWatch and billing after the demo.
-- [ ] Add GitHub Actions CI/CD and regression checks.
+- [x] Add GitHub Actions Cloudflare Pages deployment workflow (`.github/workflows/deploy-pages.yml`).
 - [ ] Add approved fictional department documents and offline RAG quality evaluation, such as Ragas. Real confidential data requires a separate security/data-handling review.
 - [ ] When retiring the demo, remove Pages/DNS, document versions and AWS resources using README cleanup instructions, then remove external provider keys and Qdrant resources.
 
