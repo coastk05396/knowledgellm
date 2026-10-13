@@ -13,17 +13,9 @@ describe("ChatPanel pending status", () => {
       signedIn: true,
       onNew: () => {},
       onOpen: () => {},
-      onSuggestion: () => {},
     };
     const { rerender } = render(<ChatPanel {...props} busy />);
 
-    const suggestions = screen.getByRole("region", {
-      name: "Operations suggested questions",
-    });
-    expect(suggestions.querySelectorAll("button")).toHaveLength(7);
-    suggestions
-      .querySelectorAll("button")
-      .forEach((button) => expect(button).toBeDisabled());
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Checking your permitted sources");
     expect(status.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
@@ -31,19 +23,9 @@ describe("ChatPanel pending status", () => {
       "aria-hidden",
       "true",
     );
-    expect(
-      screen.getByRole("button", {
-        name: "How quickly must a P1 incident be acknowledged?",
-      }),
-    ).toBeDisabled();
 
     rerender(<ChatPanel {...props} busy={false} />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: "How quickly must a P1 incident be acknowledged?",
-      }),
-    ).toBeEnabled();
   });
 });
 
@@ -66,7 +48,6 @@ describe("ChatPanel cache status", () => {
     signedIn: true,
     onNew: () => {},
     onOpen: () => {},
-    onSuggestion: () => {},
   };
 
   it("shows an accessible badge only for an explicit cache hit", () => {

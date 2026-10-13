@@ -88,3 +88,46 @@ Extend the current dense-only multilingual Qdrant retrieval to combine dense `in
 - Qdrant [hybrid search and RRF](https://qdrant.tech/documentation/search-tuning/hybrid-search/) documents named dense/sparse vectors, IDF, prefetch, RRF, and the need to evaluate ranking quality on a labeled query set; its server-side BM25 example requires Qdrant v1.15.3 or later.
 - Qdrant [Cloud Inference model availability](https://qdrant.tech/documentation/cloud/inference/) lists multilingual E5 small and BM25, including their hosted-model availability and cost notes.
 - Qdrant [Cloud Inference hybrid tutorial](https://qdrant.tech/documentation/tutorials-basics/cloud-inference-hybrid-search/) documents server-generated dense/BM25 vectors, named-vector schema and hybrid RRF query shape.
+
+## Pencil-Referenced Workspace Layout
+
+### Specification
+
+**Objective:** Rework the KnowledgeLLM workspace to match the supplied `updatetollm.pen` composition while retaining KnowledgeLLM identity and behavior.
+
+**Assumptions:**
+
+- Follow the Pen's graphite palette, department accents, typography, panel widths, source folder cards, and suggested-question cards.
+- Keep the existing department personas and authorization boundaries, grounded answers and citations, language switching, guardrail and cost feedback, React/Vite stack, and mobile support.
+- Desktop uses a compact 280px source sidebar with the session status card below its folders, a wide central chat, and a 320px Studio rail with suggested questions. Tablet preserves the hierarchy with reachable prompt cards. Mobile uses bottom navigation to switch between Sources, Chat, and Studio, with Chat active initially.
+- Motion should clarify state while preserving the calm Pen style. Add only a restrained entry for a newly arrived assistant answer; retain the existing thinking indicator and toast behavior. Keep frequent controls, manual history scrolling, and the pinned composer still.
+
+**Scope:** Frontend workspace structure and styling, chat/source pane behavior, responsive states, and focused interaction/regression coverage. No API, authorization, retrieval, ingestion, infrastructure, or new backend capability changes.
+
+**Acceptance criteria:**
+
+1. On wide screens, the workspace follows the Pen's Sources, Chat, and Studio regions with a readable header and active persona; the central chat receives enough width for answers and citations.
+2. Source rows show authorized document names and clear selection/open states. Locked departments reveal no document names or counts. Opening a source preserves the conversation.
+3. Match the supplied screenshots: keep the existing composer box fixed to the bottom edge of the chat pane, with its current width, inset, border, and send-button styling. The conversation history occupies the space above it and is the independently vertically scrollable region; scrolling history must not move the composer. Keep latest messages visible after send and keep the composer usable with the software keyboard and short viewports.
+4. The session guardrail and token/cost card sits below the folders in the source sidebar. The question rail contains the existing document prompts and fictional guardrail prompts; selecting one sends it immediately through the normal chat path and retains the draft if sending fails.
+5. Tablet preserves the source/chat/prompt hierarchy without horizontal page scrolling. Mobile uses persistent bottom navigation for Sources, Chat, and Studio, defaults to Chat, and switches views without losing conversation state. Studio shows the authorized department's prompt cards; selecting one returns to Chat and sends the question immediately.
+6. English and Traditional Chinese labels, keyboard navigation, visible focus, screen-reader semantics, reduced-motion behavior, and existing access/grounding behavior remain intact.
+7. The implementation is checked at desktop, tablet, and narrow mobile sizes, including long conversations, many source rows, loading/empty/error states, and signed-out/authorized personas.
+8. Animate only a newly arrived assistant answer: 160ms opacity plus a 6px upward settle using the existing `cubic-bezier(0.23, 1, 0.32, 1)` easing. With reduced motion, use an 80ms opacity-only transition. Keyboard focus and composer placement remain stable.
+9. At 100% zoom from 1366×768 upward, fit all collapsed department cards, the session monitor, and all seven active-department prompt cards without vertical panel scrolling. Preserve readable text and scrolling for expanded source lists and shorter viewports.
+
+**Reference:** The user-supplied `updatetollm.pen` design and workspace screenshots are the visual source of truth.
+
+### Implementation Plan
+
+1. **Inspect and map states:** Compare the active `updatetollm.pen` design and existing React components against this spec; record desktop/tablet/mobile panel behavior and preserve all current access states.
+2. **Establish the shell:** Refine the header and Sources / Chat / Studio layout in the existing app, matching the Pen styling and responsive behavior.
+3. **Fix chat scrolling and composer anchoring:** Match the supplied composer screenshot and existing Pen appearance. Keep the composer fixed to the chat pane's bottom edge and make only the history area above it scroll vertically; account for viewport height and virtual keyboard behavior.
+4. **Refine source and Studio panels:** Keep the status monitor below source folders, present prompt cards in the Studio panel, preserve locked-folder privacy, and retain current source-opening behavior.
+5. **Add restrained answer motion:** Give only a newly arrived assistant answer a 160ms opacity and 6px upward settle using the existing easing; use 80ms opacity only for reduced motion. Do not animate folder expansion, persona or language changes, panel switches, manual scrolling, or composer placement. Reuse the existing thinking indicator and toast motion.
+6. **Polish responsive and accessible states:** Verify focus, keyboard operation, translated labels, reduced motion, empty/loading/error states, and no horizontal overflow. Keep hover feedback gated to fine pointers and avoid scale changes on keyboard focus.
+7. **Verify and hand off:** Run focused frontend tests and production build, inspect desktop/tablet/mobile browser states, capture screenshots, then provide the required localhost and temporary public preview URLs. Do not deploy or change backend services.
+
+**Risks:** A narrow three-column shell can starve chat width; prioritize chat and collapse the prompt rail at explicit breakpoints. Fixed composer positioning can overlap answers or the mobile keyboard; use an independently scrollable history region and verify real viewport resizing. Answer-entry motion can distract during repeated chat use; keep it subtle and short, and use opacity only for reduced-motion users.
+
+**Open questions:** None. Treat the current Pen design as the approved visual reference.

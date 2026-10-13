@@ -142,7 +142,9 @@ it.each([
       name: `${englishLabel} — Unlocked`,
     });
     fireEvent.click(folder);
-    expect(folder).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(folder).toHaveAttribute("aria-expanded", "true"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "CH" }));
     const refreshed = await screen.findByRole("button", {
       name: `${chineseLabel} — 已解鎖`,
@@ -152,10 +154,40 @@ it.each([
       screen.queryByRole("button", { name: "Permitted source" }),
     ).not.toBeInTheDocument();
     fireEvent.click(refreshed);
-    expect(refreshed).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(refreshed).toHaveAttribute("aria-expanded", "true"),
+    );
   },
 );
 describe("Authorized knowledge workspace", () => {
+  it("disables signed-out Studio prompts without creating an unusable draft", () => {
+    const askQuestion = vi.fn(async () => ({ answer: "", citations: [] }));
+    render(
+      <Workspace
+        session={null}
+        onSwitch={async () => {}}
+        api={{
+          loadDocuments: async () => [],
+          askQuestion,
+          openDocument: async () => "https://docs.example.com/source.md",
+        }}
+      />,
+    );
+    expect(
+      within(screen.getByRole("complementary", { name: "Studio" })).getByText(
+        "Select a persona above to sign in and use Studio.",
+      ),
+    ).toBeVisible();
+    const prompts = within(
+      screen.getByRole("region", { name: /suggested questions/ }),
+    ).getAllByRole("button");
+    prompts.forEach((prompt) => expect(prompt).toBeDisabled());
+    fireEvent.click(prompts[0]);
+    expect(screen.getByRole("textbox", { name: "Your question" })).toHaveValue(
+      "",
+    );
+    expect(askQuestion).not.toHaveBeenCalled();
+  });
   it.each([
     ["finance", "Alex", "Finance"],
     ["operations", "Sam", "Operations"],
@@ -229,6 +261,10 @@ describe("Authorized knowledge workspace", () => {
     },
   );
   it("keeps the mobile identity and status copy aligned with the reference", async () => {
+    const askQuestion = vi.fn(async () => ({
+      answer: "Budget answer.",
+      citations: [],
+    }));
     const { container } = render(
       <Workspace
         session={session}
@@ -241,11 +277,14 @@ describe("Authorized knowledge workspace", () => {
               department: "finance",
             },
           ],
-          askQuestion: async () => ({ answer: "", citations: [] }),
+          askQuestion,
           openDocument: async () => "https://docs.example.com/source.md",
         }}
       />,
     );
+    expect(
+      screen.getByRole("complementary", { name: "Studio" }),
+    ).toBeInTheDocument();
     expect(
       await screen.findByRole("button", {
         name: "What is the total approved Q4 budget?",
@@ -258,12 +297,83 @@ describe("Authorized knowledge workspace", () => {
         name: "Sign in as another account: Alex, Finance",
       }),
     ).toHaveAttribute("aria-pressed", "true");
+    const workspaceNav = screen.getByRole("navigation", {
+      name: "Workspace views",
+    });
+    const chatTab = within(workspaceNav).getByRole("button", { name: "Chat" });
+    const studioTab = within(workspaceNav).getByRole("button", {
+      name: "Studio",
+    });
+    expect(
+      within(workspaceNav).getByRole("button", { name: "Sources" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(studioTab);
+    expect(studioTab).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "What is the total approved Q4 budget?",
+      }),
+    );
+    expect(chatTab).toHaveAttribute("aria-pressed", "true");
+    await screen.findByText("Budget answer.");
+    expect(askQuestion).toHaveBeenCalledTimes(1);
+    expect(askQuestion).toHaveBeenCalledWith(
+      session.accessToken,
+      "What is the total approved Q4 budget?",
+      "en",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: "Your question" }),
+      ).toHaveValue(""),
+    );
     const composer = container.querySelector(".composer-wrap")!;
     const monitor = container.querySelector(".mobile-monitor")!;
     expect(
       composer.compareDocumentPosition(monitor) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("retains a Studio question for retry when sending fails", async () => {
+    const askQuestion = vi.fn(async () => {
+      throw new Error("Unavailable");
+    });
+    render(
+      <Workspace
+        session={session}
+        onSwitch={async () => {}}
+        api={{
+          loadDocuments: async () => [
+            {
+              id: "finance-q4",
+              title: "Q4 budget overview",
+              department: "finance",
+            },
+          ],
+          askQuestion,
+          openDocument: async () => "https://docs.example.com/source.md",
+        }}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: "Your question" }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "What is the total approved Q4 budget?",
+      }),
+    );
+    await screen.findByRole("alert");
+    expect(askQuestion).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("textbox", { name: "Your question" })).toHaveValue(
+      "What is the total approved Q4 budget?",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Your question" }),
+    ).toBeEnabled();
   });
 
   it("only displays documents received from the authorized API", async () => {
@@ -354,6 +464,10 @@ describe("Authorized knowledge workspace", () => {
       screen.getByRole("button", { name: "Source: Q4 budget overview" }),
     );
     await waitFor(() => expect(opened).toBe("finance-q4"));
+    expect(
+      screen.getByRole("button", { name: "Q4 budget overview" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Vendor costs changed.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "New chat" }));
     expect(screen.queryByText("Vendor costs changed.")).not.toBeInTheDocument();
   });
@@ -861,7 +975,7 @@ const guardrailExamples = [
   ],
 ] as const;
 it.each(guardrailExamples)(
-  "offers only %s guardrail examples in %s without submitting them",
+  "submits only the authorized %s guardrail examples in %s",
   async (department, language, questions) => {
     window.localStorage.setItem("knowledge-language", language);
     const askQuestion = vi.fn(async () => ({ answer: "", citations: [] }));
@@ -897,14 +1011,22 @@ it.each(guardrailExamples)(
           /example\.com|202-555/.test(button.textContent ?? ""),
         ),
     ).toHaveLength(2);
-    for (const question of questions) {
+    for (const [index, question] of questions.entries()) {
       fireEvent.click(within(region).getByRole("button", { name: question }));
       const input = screen.getByRole("textbox", {
         name: language === "en" ? "Your question" : "您的問題",
       });
       expect(input).toHaveValue(question);
-      expect(input).toHaveFocus();
-      expect(askQuestion).not.toHaveBeenCalled();
+      expect(askQuestion).toHaveBeenCalledTimes(index + 1);
+      expect(askQuestion).toHaveBeenLastCalledWith(
+        session.accessToken,
+        question,
+        language,
+      );
+      await waitFor(() => {
+        expect(input).toBeEnabled();
+        expect(input).toHaveValue("");
+      });
     }
   },
 );

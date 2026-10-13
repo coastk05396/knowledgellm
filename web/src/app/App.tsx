@@ -6,7 +6,7 @@ import {
   type Language,
 } from "./language";
 import { useEffect, useRef, useState } from "react";
-import { Terminal } from "lucide-react";
+import { Folder, MessageSquare, Sparkles, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
@@ -16,6 +16,7 @@ import { DepartmentFolders } from "../components/DepartmentFolders";
 import { ChatPanel, type Message } from "../components/ChatPanel";
 import { Composer } from "../components/Composer";
 import { SystemMonitor } from "../components/SystemMonitor";
+import { SuggestedQuestions } from "../components/SuggestedQuestions";
 import { Toast } from "../components/Toast";
 import "../styles/tokens.css";
 import "../styles/app.css";
@@ -49,6 +50,11 @@ function WorkspaceContent({
     null,
   );
   const [cost, setCost] = useState<number | null>(null);
+  const [mobileView, setMobileView] = useState<"sources" | "chat" | "studio">(
+    "sources",
+  );
+  const [mobileMotion, setMobileMotion] = useState(false);
+  const [openedDocumentId, setOpenedDocumentId] = useState<string | null>(null);
   const documentGeneration = useRef(0);
   const pendingSourceWindows = useRef(new Set<Window>());
   useEffect(() => {
@@ -57,6 +63,7 @@ function WorkspaceContent({
     setChatFailed(false);
     setCost(null);
     setError(null);
+    setOpenedDocumentId(null);
   }, [session, api]);
   useEffect(() => {
     const generation = ++documentGeneration.current;
@@ -132,6 +139,7 @@ function WorkspaceContent({
       if (new URL(url).protocol !== "https:")
         throw new Error("Invalid source URL");
       sourceWindow.location.replace(url);
+      setOpenedDocumentId(id);
     } catch {
       sourceWindow.close();
       if (generation === documentGeneration.current)
@@ -184,12 +192,25 @@ function WorkspaceContent({
     setMessages([]);
     setChatFailed(false);
     setCost(null);
+    setOpenedDocumentId(null);
+    setMobileMotion(false);
+    setMobileView("sources");
     setError(null);
     void onSwitch(department);
   };
+  const selectSuggestion = async (question: string) => {
+    if (!authorizedListing || loading || !documents.length || busy) return;
+    setSuggestion({ question });
+    setMobileMotion(false);
+    setMobileView("chat");
+    if (await send(question)) setSuggestion(null);
+  };
   return (
-    <div className="workspace">
-      <header className="brand-bar">
+    <div className="workspace" data-mobile-motion={mobileMotion}>
+      <header
+        className="brand-bar"
+        data-mobile-active={mobileView === "sources"}
+      >
         <a className="brand" href="/" aria-label={t("KnowledgeLLM home")}>
           <span className="brand-mark">
             <Terminal />
@@ -203,7 +224,12 @@ function WorkspaceContent({
           disabled={authLoading || (!session && !authConfigured)}
         />
       </header>
-      <aside className="sidebar">
+      <aside
+        id="sources-panel"
+        className="sidebar"
+        data-mobile-panel="sources"
+        data-mobile-active={mobileView === "sources"}
+      >
         <DepartmentFolders
           documents={documents}
           onOpen={(id) => {
@@ -211,6 +237,7 @@ function WorkspaceContent({
           }}
           loading={loading}
           authorizedListing={authorizedListing}
+          openedDocumentId={openedDocumentId}
         />
         <div className="desktop-monitor">
           <SystemMonitor
@@ -222,7 +249,42 @@ function WorkspaceContent({
           />
         </div>
       </aside>
-      <main className="chat-area">
+      <aside
+        id="suggestions-panel"
+        className="suggestion-rail"
+        data-mobile-panel="studio"
+        data-mobile-active={mobileView === "studio"}
+        aria-labelledby="suggestions-title"
+      >
+        <div className="suggestion-heading">
+          <div>
+            <h2 id="suggestions-title">{t("Studio")}</h2>
+            <p>{t("Suggested questions")}</p>
+          </div>
+        </div>
+        {!session && (
+          <p role="status" className="guardrail-note">
+            <span className="desktop-copy">
+              {t("Select a persona above to sign in and use Studio.")}
+            </span>
+            <span className="mobile-copy">
+              {t("Open Sources to select a persona and sign in.")}
+            </span>
+          </p>
+        )}
+        <SuggestedQuestions
+          departments={departments.length ? departments : ["finance"]}
+          busy={busy}
+          disabled={!authorizedListing || loading || !documents.length}
+          onSuggestion={(question) => void selectSuggestion(question)}
+        />
+      </aside>
+      <main
+        id="chat-panel"
+        className="chat-area"
+        data-mobile-panel="chat"
+        data-mobile-active={mobileView === "chat"}
+      >
         <ChatPanel
           documents={documents}
           name={name}
@@ -230,7 +292,6 @@ function WorkspaceContent({
           signedIn={Boolean(session)}
           messages={messages}
           busy={busy}
-          onSuggestion={(question) => setSuggestion({ question })}
           onNew={() => {
             setSuggestion(null);
             setMessages([]);
@@ -243,6 +304,11 @@ function WorkspaceContent({
           }}
         />
         <div className="workspace-notices">
+          {!session && (
+            <p className="mobile-copy" role="status">
+              {t("Open Sources to select a persona and sign in.")}
+            </p>
+          )}
           {(error || authError) && (
             <p role="alert" className="error-message">
               {t(error || authError || "")}
@@ -277,6 +343,36 @@ function WorkspaceContent({
           />
         </div>
       </main>
+      <nav
+        className="mobile-view-nav"
+        data-active-view={mobileView}
+        aria-label={t("Workspace views")}
+      >
+        {(
+          [
+            ["sources", "Sources", Folder],
+            ["chat", "Chat", MessageSquare],
+            ["studio", "Studio", Sparkles],
+          ] as const
+        ).map(([view, label, Icon]) => (
+          <button
+            key={view}
+            className="mobile-view-button"
+            type="button"
+            aria-controls={
+              view === "studio" ? "suggestions-panel" : `${view}-panel`
+            }
+            aria-pressed={mobileView === view}
+            onClick={(event) => {
+              setMobileMotion(event.detail > 0);
+              setMobileView(view);
+            }}
+          >
+            <Icon aria-hidden="true" size={20} />
+            {t(label)}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
@@ -309,6 +405,7 @@ function ConnectedApp() {
       />
       {auth.toast && (
         <Toast
+          duration={2000}
           message={auth.toast.message}
           subtitle={auth.toast.subtitle}
           department={auth.toast.department}

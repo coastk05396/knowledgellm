@@ -93,12 +93,30 @@ test.beforeEach(async ({ page }) => {
 for (const width of [320, 390, 768, 1440]) {
   test(`signed-out layout fits ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
+    if (width <= 760) {
+      await expect(
+        page.getByRole("button", { name: "Sources", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Chat", exact: true }).click();
+    }
     await expect(page.getByRole("textbox")).toBeDisabled();
     const dimensions = await page.evaluate(() => ({
       width: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
+    if (width <= 760) {
+      await page.getByRole("button", { name: "Studio", exact: true }).click();
+      await expect(
+        page
+          .locator(".suggestion-rail")
+          .getByText("Open Sources to select a persona and sign in."),
+      ).toBeVisible();
+    } else {
+      await expect(
+        page.getByText("Select a persona above to sign in and use Studio."),
+      ).toBeVisible();
+    }
   });
 }
 
@@ -108,9 +126,17 @@ for (const width of [320, 390, 1440]) {
   }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockExternalServices(page, "operations");
+    if (width <= 760)
+      await page.getByRole("button", { name: "Sources", exact: true }).click();
     await page.getByRole("button", { name: /another account: Sam/ }).click();
     const folder = page.locator(".folder-group.operations .folder-button");
     await expect(folder).toBeEnabled();
+    if (width <= 760) {
+      await expect(
+        page.getByRole("button", { name: "Sources", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Sources", exact: true }).click();
+    }
     await expect(folder).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("#files-operations")).toBeHidden();
     for (const language of ["EN", "CH"] as const) {
@@ -212,6 +238,7 @@ test("touch input keeps hover styling unchanged", async ({
     const page = await context.newPage();
     await mockExternalServices(page);
     await page.goto(baseURL!);
+    await page.getByRole("button", { name: "Chat", exact: true }).tap();
     expect(
       await page.evaluate(
         () => matchMedia("(hover: hover) and (pointer: fine)").matches,
@@ -244,6 +271,44 @@ test("reduced-motion pointer press uses opacity without scaling", async ({
   await page.mouse.up();
   await expect(button).toHaveCSS("opacity", "1");
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 568 },
+]) {
+  test(`compact mobile header and sign-in toast leave the composer usable at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await page.getByRole("button", { name: "Sources", exact: true }).click();
+    await page.getByRole("button", { name: /another account: Alex/ }).click();
+    await expect(page.locator(".composer textarea")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Sources", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    await expect(page.getByRole("textbox")).toBeEnabled();
+    const toast = page.locator(".toast");
+    await expect(toast).toBeVisible();
+    await expect(page.locator(".brand-bar")).toBeHidden();
+    const heading = await page.locator(".chat-heading").boundingBox();
+    const notification = await toast.boundingBox();
+    const composer = await page.locator(".composer-wrap").boundingBox();
+    const nav = await page.locator(".mobile-view-nav").boundingBox();
+    expect(heading!.height).toBeLessThanOrEqual(60);
+    expect(notification!.height).toBeLessThanOrEqual(76);
+    expect(notification!.y + notification!.height).toBeLessThanOrEqual(
+      composer!.y,
+    );
+    expect(composer!.y + composer!.height).toBeLessThanOrEqual(nav!.y);
+    await page.clock.runFor(2000);
+    await expect(toast).toHaveClass(/closing/);
+    await page.clock.runFor(140);
+    await expect(toast).toHaveCount(0);
+  });
+}
 
 for (const reduced of [false, true]) {
   for (const dismissal of ["manual", "automatic"] as const) {
@@ -292,7 +357,9 @@ for (const reduced of [false, true]) {
           .getByRole("button", { name: "Dismiss notification" })
           .click();
       } else {
-        await page.clock.runFor(3820);
+        await page.clock.runFor(1819);
+        await expect(toast).not.toHaveClass(/closing/);
+        await page.clock.runFor(1);
       }
       await expect(toast).toHaveClass(/closing/);
       await expect(toast).toHaveCSS(
