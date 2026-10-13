@@ -51,8 +51,9 @@ function WorkspaceContent({
   );
   const [cost, setCost] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"sources" | "chat" | "studio">(
-    "chat",
+    "sources",
   );
+  const [mobileMotion, setMobileMotion] = useState(false);
   const [openedDocumentId, setOpenedDocumentId] = useState<string | null>(null);
   const documentGeneration = useRef(0);
   const pendingSourceWindows = useRef(new Set<Window>());
@@ -192,19 +193,24 @@ function WorkspaceContent({
     setChatFailed(false);
     setCost(null);
     setOpenedDocumentId(null);
-    setMobileView("chat");
+    setMobileMotion(false);
+    setMobileView("sources");
     setError(null);
     void onSwitch(department);
   };
   const selectSuggestion = async (question: string) => {
     if (!authorizedListing || loading || !documents.length || busy) return;
     setSuggestion({ question });
+    setMobileMotion(false);
     setMobileView("chat");
     if (await send(question)) setSuggestion(null);
   };
   return (
-    <div className="workspace">
-      <header className="brand-bar">
+    <div className="workspace" data-mobile-motion={mobileMotion}>
+      <header
+        className="brand-bar"
+        data-mobile-active={mobileView === "sources"}
+      >
         <a className="brand" href="/" aria-label={t("KnowledgeLLM home")}>
           <span className="brand-mark">
             <Terminal />
@@ -258,7 +264,12 @@ function WorkspaceContent({
         </div>
         {!session && (
           <p role="status" className="guardrail-note">
-            {t("Select a persona above to sign in and use Studio.")}
+            <span className="desktop-copy">
+              {t("Select a persona above to sign in and use Studio.")}
+            </span>
+            <span className="mobile-copy">
+              {t("Open Sources to select a persona and sign in.")}
+            </span>
           </p>
         )}
         <SuggestedQuestions
@@ -293,6 +304,11 @@ function WorkspaceContent({
           }}
         />
         <div className="workspace-notices">
+          {!session && (
+            <p className="mobile-copy" role="status">
+              {t("Open Sources to select a persona and sign in.")}
+            </p>
+          )}
           {(error || authError) && (
             <p role="alert" className="error-message">
               {t(error || authError || "")}
@@ -327,7 +343,11 @@ function WorkspaceContent({
           />
         </div>
       </main>
-      <nav className="mobile-view-nav" aria-label={t("Workspace views")}>
+      <nav
+        className="mobile-view-nav"
+        data-active-view={mobileView}
+        aria-label={t("Workspace views")}
+      >
         {(
           [
             ["sources", "Sources", Folder],
@@ -343,7 +363,10 @@ function WorkspaceContent({
               view === "studio" ? "suggestions-panel" : `${view}-panel`
             }
             aria-pressed={mobileView === view}
-            onClick={() => setMobileView(view)}
+            onClick={(event) => {
+              setMobileMotion(event.detail > 0);
+              setMobileView(view);
+            }}
           >
             <Icon aria-hidden="true" size={20} />
             {t(label)}

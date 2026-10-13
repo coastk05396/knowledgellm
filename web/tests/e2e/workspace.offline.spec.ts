@@ -44,10 +44,17 @@ async function signInWithLongAnswers(page: Page, documentCount = 1) {
     },
   );
   await page.goto("/");
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await page.getByRole("button", { name: "Sources", exact: true }).click();
+  }
   await page.getByRole("button", { name: /another account: Alex/ }).click();
-  await expect(
-    page.getByRole("textbox", { name: "Your question" }),
-  ).toBeEnabled();
+  await expect(page.locator(".composer textarea")).toBeEnabled();
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await expect(
+      page.getByRole("button", { name: "Sources", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+  }
 }
 
 for (const viewport of [
@@ -247,11 +254,25 @@ test("mobile workspace tabs switch panels and keep source and prompt cards compa
   const chatTab = nav.getByRole("button", { name: "Chat" });
   const studioTab = nav.getByRole("button", { name: "Studio" });
   await expect(chatTab).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".brand-bar")).toBeHidden();
   await expect(page.locator("#sources-panel")).toBeHidden();
   await expect(page.locator("#suggestions-panel")).toBeHidden();
 
   await sourceTab.click();
   await expect(page.locator("#sources-panel")).toBeVisible();
+  await expect(page.locator(".brand-bar")).toBeVisible();
+  const monitorGap = await page
+    .locator(".sidebar .system-monitor")
+    .evaluate((element) => {
+      const heading = element
+        .querySelector(".monitor-heading")!
+        .getBoundingClientRect();
+      const firstRow = element
+        .querySelector(".monitor-item")!
+        .getBoundingClientRect();
+      return firstRow.top - heading.bottom;
+    });
+  expect(monitorGap).toBeGreaterThanOrEqual(10);
   await expect(page.locator("#chat-panel")).toBeHidden();
   const folder = await page.locator(".folder-button").first().boundingBox();
   expect(folder).not.toBeNull();
@@ -259,6 +280,26 @@ test("mobile workspace tabs switch panels and keep source and prompt cards compa
 
   await studioTab.click();
   await expect(page.getByRole("heading", { name: "Studio" })).toBeVisible();
+  await expect(page.locator(".brand-bar")).toBeHidden();
+  const indicator = await nav.evaluate((element) => {
+    const style = getComputedStyle(element, "::before");
+    return {
+      duration: style.transitionDuration,
+      easing: style.transitionTimingFunction,
+      width: parseFloat(style.width),
+    };
+  });
+  expect(indicator.duration).toBe("0.18s");
+  expect(indicator.easing).toBe("cubic-bezier(0.77, 0, 0.175, 1)");
+  await expect
+    .poll(() =>
+      nav.evaluate(
+        (element) =>
+          new DOMMatrixReadOnly(getComputedStyle(element, "::before").transform)
+            .m41,
+      ),
+    )
+    .toBeCloseTo(2 * (indicator.width + 8), 1);
   await expect(page.locator("#sources-panel")).toBeHidden();
   await expect(page.locator("#chat-panel")).toBeHidden();
   await page.screenshot({
@@ -285,6 +326,31 @@ test("mobile workspace tabs switch panels and keep source and prompt cards compa
   expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(844);
 });
 
+test("keyboard Studio prompts switch to Chat without tab motion", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInWithLongAnswers(page);
+  await page.getByRole("button", { name: "Studio", exact: true }).click();
+  await page.locator(".suggestion-buttons button").first().focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Chat", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".workspace")).toHaveAttribute(
+    "data-mobile-motion",
+    "false",
+  );
+  expect(
+    await page
+      .locator(".mobile-view-nav")
+      .evaluate(
+        (element) => getComputedStyle(element, "::before").transitionDuration,
+      ),
+  ).toBe("0s");
+  await expect(page.locator(".assistant-message")).toHaveCount(1);
+});
+
 test("reduced motion uses opacity-only answer entry and mobile tabs remain keyboard accessible", async ({
   page,
 }) => {
@@ -292,6 +358,29 @@ test("reduced motion uses opacity-only answer entry and mobile tabs remain keybo
   await page.emulateMedia({ reducedMotion: "reduce" });
   await signInWithLongAnswers(page);
   const studioTab = page.getByRole("button", { name: "Studio", exact: true });
+  await studioTab.click();
+  const reducedTabMotion = await page
+    .locator(".suggestion-groups")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        property: style.transitionProperty,
+        duration: style.transitionDuration,
+        transform: style.transform,
+      };
+    });
+  expect(reducedTabMotion).toEqual({
+    property: "opacity",
+    duration: "0.08s",
+    transform: "none",
+  });
+  expect(
+    await page
+      .locator(".mobile-view-nav")
+      .evaluate(
+        (element) => getComputedStyle(element, "::before").transitionDuration,
+      ),
+  ).toBe("0s");
   await studioTab.focus();
   await page.keyboard.press("Enter");
   await expect(studioTab).toHaveAttribute("aria-pressed", "true");

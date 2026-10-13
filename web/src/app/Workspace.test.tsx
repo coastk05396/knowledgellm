@@ -174,7 +174,9 @@ describe("Authorized knowledge workspace", () => {
       />,
     );
     expect(
-      screen.getByText("Select a persona above to sign in and use Studio."),
+      within(screen.getByRole("complementary", { name: "Studio" })).getByText(
+        "Select a persona above to sign in and use Studio.",
+      ),
     ).toBeVisible();
     const prompts = within(
       screen.getByRole("region", { name: /suggested questions/ }),
@@ -302,7 +304,9 @@ describe("Authorized knowledge workspace", () => {
     const studioTab = within(workspaceNav).getByRole("button", {
       name: "Studio",
     });
-    expect(chatTab).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(workspaceNav).getByRole("button", { name: "Sources" }),
+    ).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(studioTab);
     expect(studioTab).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(

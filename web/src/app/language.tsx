@@ -39,6 +39,8 @@ const translations: Record<string, string> = {
   "Suggested questions": "建議問題",
   "Select a persona above to sign in and use Studio.":
     "請選擇上方身分登入，即可使用工作室。",
+  "Open Sources to select a persona and sign in.":
+    "請開啟來源，選擇身分並登入。",
   Active: "使用中",
   "Access-scoped answers with source citations":
     "依存取權限回答，並附上來源引用",

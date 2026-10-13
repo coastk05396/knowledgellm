@@ -903,6 +903,8 @@ h2 {
     border: 0;
   }
   .mobile-view-nav {
+    position: relative;
+    isolation: isolate;
     display: flex;
     flex: 0 0 auto;
     align-items: stretch;
@@ -913,6 +915,8 @@ h2 {
     background: var(--surface);
   }
   .mobile-view-button {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex: 1 1 0;
     flex-direction: column;
@@ -927,7 +931,50 @@ h2 {
   }
   .mobile-view-button[aria-pressed="true"] {
     color: var(--text);
+  }
+  .mobile-view-nav::before {
+    content: "";
+    position: absolute;
+    top: 6px;
+    bottom: max(6px, env(safe-area-inset-bottom));
+    left: 12px;
+    width: calc((100% - 40px) / 3);
+    border-radius: 9px;
     background: var(--raised);
+    transform: translateX(0);
+    pointer-events: none;
+  }
+  .mobile-view-nav[data-active-view="chat"]::before {
+    transform: translateX(calc(100% + 8px));
+  }
+  .mobile-view-nav[data-active-view="studio"]::before {
+    transform: translateX(calc(200% + 16px));
+  }
+  .workspace[data-mobile-motion="true"] .mobile-view-nav::before {
+    transition: transform 180ms cubic-bezier(0.77, 0, 0.175, 1);
+  }
+  .workspace[data-mobile-motion="true"]
+    :is(
+      .sidebar[data-mobile-active="true"] .folders,
+      .chat-area[data-mobile-active="true"] .conversation,
+      .suggestion-rail[data-mobile-active="true"] .suggestion-groups
+    ) {
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @starting-style {
+    .workspace[data-mobile-motion="true"]
+      :is(
+        .sidebar[data-mobile-active="true"] .folders,
+        .chat-area[data-mobile-active="true"] .conversation,
+        .suggestion-rail[data-mobile-active="true"] .suggestion-groups
+      ) {
+      opacity: 0;
+      transform: translateX(12px);
+    }
   }
   .sidebar[data-mobile-active="true"] .desktop-monitor {
     display: block;
@@ -935,6 +982,7 @@ h2 {
   }
   .sidebar[data-mobile-active="true"] .system-monitor {
     grid-template-columns: 1fr;
+    row-gap: 12px;
     padding: 12px 14px;
   }
   .sidebar[data-mobile-active="true"] .monitor-heading {
@@ -1520,6 +1568,9 @@ h2 {
   min-height: auto;
 }
 @media (max-width: 760px) {
+  .brand-bar[data-mobile-active="false"] {
+    display: none;
+  }
   .toast-container {
     bottom: calc(190px + env(safe-area-inset-bottom, 0px));
     right: 16px;
@@ -1566,6 +1617,28 @@ h2 {
   button:not(:disabled):active:not(:focus-visible) {
     transform: none;
     opacity: 0.85;
+  }
+  .workspace[data-mobile-motion="true"] .mobile-view-nav::before {
+    transition: none;
+  }
+  .workspace[data-mobile-motion="true"]
+    :is(
+      .sidebar[data-mobile-active="true"] .folders,
+      .chat-area[data-mobile-active="true"] .conversation,
+      .suggestion-rail[data-mobile-active="true"] .suggestion-groups
+    ) {
+    transform: none;
+    transition: opacity 80ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  }
+  @starting-style {
+    .workspace[data-mobile-motion="true"]
+      :is(
+        .sidebar[data-mobile-active="true"] .folders,
+        .chat-area[data-mobile-active="true"] .conversation,
+        .suggestion-rail[data-mobile-active="true"] .suggestion-groups
+      ) {
+      transform: none;
+    }
   }
   .toast,
   .toast.closing {
