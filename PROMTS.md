@@ -78,6 +78,8 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 
 ## Deployment and Demo Checklist
 
+- The Terraform deployment allows only `https://rag.rickchen.si` as the API CORS origin and only `https://rag.rickchen.si/` as the Cognito callback and logout URL.
+
 - [ ] Reconfirm account allowances, provider quotas/data handling, billing alerts, and current usage before additional deployment.
 - [ ] Deploy the frontend to Cloudflare Pages using README setup instructions; configure public frontend variables and matching API CORS/authentication origins.
 - [ ] Attach the custom domain and verify DNS, HTTPS, sign-in, source links, and cited chat.
