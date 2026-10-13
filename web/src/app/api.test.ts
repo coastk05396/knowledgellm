@@ -151,9 +151,44 @@ describe("Knowledge API boundary", () => {
       "access-token",
       "finance-q4-budget-overview",
     );
-    expect(destination).toBe(
-      "https://private-bucket.example.com/finance/q4-budget-overview.md?signature=temporary",
+    expect(destination).toEqual({
+      url: "https://private-bucket.example.com/finance/q4-budget-overview.md?signature=temporary",
+    });
+  });
+  it("keeps valid Markdown content and citation excerpts and ignores other types", async () => {
+    appConfig.apiUrl = "https://api.example.com";
+    const document = { id: "source", title: "Source" };
+    const url = "https://docs.example.com/source.md";
+    const responses: unknown[] = [
+      { document: { ...document, url, content: "# Source" } },
+      { document: { ...document, url, content: 42 } },
+      {
+        answer: "Answer",
+        citations: [
+          { document_id: "source", title: "Source", excerpt: "- **Cap**" },
+          { document_id: "source", title: "Source", excerpt: ["Cap"] },
+          { document_id: "source", title: "Source" },
+        ],
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(JSON.stringify(responses.shift())),
     );
+    expect(await knowledgeApi.openDocument("access", "source")).toEqual({
+      url,
+      content: "# Source",
+    });
+    expect(await knowledgeApi.openDocument("access", "source")).toEqual({
+      url,
+    });
+    expect(
+      (await knowledgeApi.askQuestion("access", "Cap?")).citations,
+    ).toEqual([
+      { document_id: "source", title: "Source", excerpt: "- **Cap**" },
+      { document_id: "source", title: "Source" },
+      { document_id: "source", title: "Source" },
+    ]);
   });
 });
 
@@ -192,7 +227,7 @@ it.each(["en", "zh-TW"] as const)(
       `https://api.example.com/documents?language=${language}`,
       `https://api.example.com/documents/source?language=${language}`,
     ]);
-    expect(destination).toBe(
+    expect(destination.url).toBe(
       `https://docs.example.com/source${language === "zh-TW" ? "-ch" : ""}.md`,
     );
   },

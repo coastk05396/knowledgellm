@@ -21,7 +21,6 @@ const translations: Record<string, string> = {
   restricted: "受限",
   "Selecting a demo identity starts Cognito custom authentication. Access is limited to that persona's permitted sample documents.":
     "選擇示範身分會啟動 Cognito 自訂驗證。您只能存取該身分獲准使用的範例文件。",
-  "Department folders": "部門資料夾",
   Sources: "來源",
   Chat: "聊天",
   "Workspace views": "工作區檢視",
@@ -30,15 +29,19 @@ const translations: Record<string, string> = {
   Unlocked: "已解鎖",
   "Cached Hit": "快取命中",
   "Ask KnowledgeLLM": "詢問 KnowledgeLLM",
-  "03. Notebook studio": "03. 筆記工作室",
-  Studio: "工作室",
-  "Source context": "來源內容",
-  "Authorized sources in this notebook": "此筆記中的授權來源",
-  "Sign in to load authorized sources": "登入以載入授權來源",
-  "Close Studio": "關閉工作室",
-  "Suggested questions": "建議問題",
-  "Select a persona above to sign in and use Studio.":
-    "請選擇上方身分登入，即可使用工作室。",
+  "Source content": "來源內容",
+  "Close source content": "關閉來源內容",
+  "Select a source or a citation to read it here.":
+    "選擇來源或引用，即可在此閱讀。",
+  "Open full document in a new tab": "在新分頁開啟完整文件",
+  "A preview is unavailable for this source. Open the full document instead.":
+    "無法預覽此來源，請改為開啟完整文件。",
+  "Open on the right": "已在右側開啟",
+  Reading: "閱讀中",
+  "Select a persona above to sign in.": "請選擇上方身分登入。",
+  "Type a question, press Enter to send": "輸入問題，按 Enter 送出",
+  "This session": "本次工作階段",
+  Answers: "已回答",
   "Open Sources to select a persona and sign in.":
     "請開啟來源，選擇身分並登入。",
   Active: "使用中",
@@ -60,14 +63,8 @@ const translations: Record<string, string> = {
   "Sign in to ask KnowledgeLLM…": "登入後即可詢問 KnowledgeLLM…",
   "Send question": "傳送問題",
   "Protected documents · Sign-in required": "受保護的文件 · 需要登入",
-  "System monitor": "系統監控",
-  Session: "工作階段",
-  "PII guardrail": "個人資料防護",
   "Token cost": "Token 費用",
-  "Checking…": "檢查中…",
-  "Check unavailable": "無法執行檢查",
   "Result unavailable": "無法取得結果",
-  "Awaiting question": "等待提問",
   Unavailable: "無法取得",
   "No PII detected": "未偵測到個人資料",
   "Question PII blocked": "已阻擋問題中的個人資料",
@@ -80,8 +77,6 @@ const translations: Record<string, string> = {
   "Documents are unavailable. Please check your connection and sign in again.":
     "無法取得文件。請檢查網路連線並重新登入。",
   "This source is not available to your account.": "您的帳號無法存取此來源。",
-  "Your browser blocked the source window. Allow pop-ups and retry.":
-    "瀏覽器已封鎖來源視窗。請允許彈出式視窗後重試。",
   "The source could not be opened. Please try again.":
     "無法開啟來源，請再試一次。",
   "An answer is unavailable right now. Please try your question again.":

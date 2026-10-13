@@ -1,12 +1,6 @@
 import { useLanguage } from "../app/language";
 import { useEffect, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  Folder,
-  LockKeyhole,
-} from "lucide-react";
+import { ChevronRight, FileText, Folder, LockKeyhole } from "lucide-react";
 import type { DocumentSummary } from "../app/api";
 import { identities } from "./IdentityPicker";
 export function DepartmentFolders({
@@ -17,12 +11,12 @@ export function DepartmentFolders({
   openedDocumentId,
 }: {
   documents: DocumentSummary[];
-  onOpen: (id: string) => void;
+  onOpen: (id: string, opener: HTMLElement) => void;
   loading: boolean;
   authorizedListing: boolean;
   openedDocumentId?: string | null;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [expandedDepartments, setExpandedDepartments] = useState<string[]>([]);
 
   useEffect(() => {
@@ -31,8 +25,14 @@ export function DepartmentFolders({
   return (
     <section className="folders" aria-labelledby="folders-title">
       <div className="folder-heading">
-        <h2 id="folders-title">{t("Department folders")}</h2>
-        <p>{t("PERSONA ACCESS")}</p>
+        <h2 id="folders-title">{t("Sources")}</h2>
+        <p>
+          {authorizedListing && documents.length
+            ? language === "zh-TW"
+              ? `可用 ${documents.length} 份`
+              : `${documents.length} available`
+            : t("PERSONA ACCESS")}
+        </p>
       </div>
       {loading && (
         <p
@@ -69,6 +69,11 @@ export function DepartmentFolders({
                 aria-label={`${t(person.label)} / ${person.name} — ${t(permitted ? "Unlocked" : "restricted")}`}
                 aria-expanded={expanded}
                 aria-controls={`files-${person.department}`}
+                aria-describedby={
+                  permitted || loading
+                    ? undefined
+                    : `locked-${person.department}`
+                }
                 onClick={() =>
                   setExpandedDepartments((current) =>
                     current.includes(person.department)
@@ -89,12 +94,15 @@ export function DepartmentFolders({
                 <span className="folder-count">
                   {permitted ? docs.length : <LockKeyhole size={16} />}
                 </span>
-                {expanded ? (
-                  <ChevronDown size={18} />
-                ) : (
-                  <ChevronRight size={18} />
-                )}
+                <ChevronRight className="folder-chevron" size={18} />
               </button>
+              {!permitted && !loading && (
+                <p id={`locked-${person.department}`} className="folder-hint">
+                  {language === "zh-TW"
+                    ? `切換為 ${person.name} 才能查看與提問`
+                    : `Switch to ${person.name} to view and ask`}
+                </p>
+              )}
               <div
                 id={`files-${person.department}`}
                 hidden={!expanded}
@@ -107,10 +115,15 @@ export function DepartmentFolders({
                     aria-current={
                       openedDocumentId === doc.id ? "page" : undefined
                     }
-                    onClick={() => onOpen(doc.id)}
+                    onClick={(event) => onOpen(doc.id, event.currentTarget)}
                   >
                     <FileText size={19} />
                     <span>{t(doc.title)}</span>
+                    {openedDocumentId === doc.id && (
+                      <span className="file-reading" aria-hidden="true">
+                        {t("Reading")}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

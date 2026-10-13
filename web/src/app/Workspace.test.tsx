@@ -135,7 +135,7 @@ it.each([
         { id: "source", title: "Permitted source", department },
       ],
       askQuestion: async () => ({ answer: "", citations: [] }),
-      openDocument: async () => "https://docs.example.com/source.md",
+      openDocument: async () => ({ url: "https://docs.example.com/source.md" }),
     };
     render(<Workspace session={session} onSwitch={async () => {}} api={api} />);
     const folder = await screen.findByRole("button", {
@@ -160,7 +160,7 @@ it.each([
   },
 );
 describe("Authorized knowledge workspace", () => {
-  it("disables signed-out Studio prompts without creating an unusable draft", () => {
+  it("disables signed-out suggested questions without creating an unusable draft", () => {
     const askQuestion = vi.fn(async () => ({ answer: "", citations: [] }));
     render(
       <Workspace
@@ -169,15 +169,18 @@ describe("Authorized knowledge workspace", () => {
         api={{
           loadDocuments: async () => [],
           askQuestion,
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
     expect(
-      within(screen.getByRole("complementary", { name: "Studio" })).getByText(
-        "Select a persona above to sign in and use Studio.",
-      ),
+      screen.getByText("Protected documents · Sign-in required"),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Studio" }),
+    ).not.toBeInTheDocument();
     const prompts = within(
       screen.getByRole("region", { name: /suggested questions/ }),
     ).getAllByRole("button");
@@ -187,6 +190,50 @@ describe("Authorized knowledge workspace", () => {
       "",
     );
     expect(askQuestion).not.toHaveBeenCalled();
+  });
+  it("keeps suggested questions disabled until authorized sources load", async () => {
+    let resolveDocuments!: (docs: DocumentSummary[]) => void;
+    render(
+      <Workspace
+        session={session}
+        onSwitch={async () => {}}
+        api={{
+          loadDocuments: () =>
+            new Promise<DocumentSummary[]>((resolve) => {
+              resolveDocuments = resolve;
+            }),
+          askQuestion: async () => ({ answer: "", citations: [] }),
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
+        }}
+      />,
+    );
+    const chips = () =>
+      within(
+        screen.getByRole("region", { name: /suggested questions/ }),
+      ).getAllByRole("button");
+    chips().forEach((chip) => expect(chip).toBeDisabled());
+    await act(async () => {
+      resolveDocuments([
+        {
+          id: "finance-q4",
+          title: "Q4 budget overview",
+          department: "finance",
+        },
+        { id: "finance-ex", title: "Expense policy", department: "finance" },
+      ]);
+    });
+    expect(chips()).toHaveLength(7);
+    chips().forEach((chip) => expect(chip).toBeEnabled());
+    expect(
+      chips()
+        .slice(-2)
+        .every((chip) => chip.classList.contains("guardrail-question")),
+    ).toBe(true);
+    expect(
+      screen.getByText("Asking as Alex · searches only Finance's 2 sources"),
+    ).toBeVisible();
   });
   it.each([
     ["finance", "Alex", "Finance"],
@@ -206,7 +253,9 @@ describe("Authorized knowledge workspace", () => {
           api={{
             loadDocuments: () => documents,
             askQuestion: async () => ({ answer: "", citations: [] }),
-            openDocument: async () => "https://docs.example.com/source.md",
+            openDocument: async () => ({
+              url: "https://docs.example.com/source.md",
+            }),
           }}
         />,
       );
@@ -260,12 +309,12 @@ describe("Authorized knowledge workspace", () => {
       expect(screen.queryByText("Unlocked")).not.toBeInTheDocument();
     },
   );
-  it("keeps the mobile identity and status copy aligned with the reference", async () => {
+  it("offers Sources and Chat views and sends a suggested question at once", async () => {
     const askQuestion = vi.fn(async () => ({
       answer: "Budget answer.",
       citations: [],
     }));
-    const { container } = render(
+    render(
       <Workspace
         session={session}
         onSwitch={async () => {}}
@@ -278,43 +327,30 @@ describe("Authorized knowledge workspace", () => {
             },
           ],
           askQuestion,
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
-    expect(
-      screen.getByRole("complementary", { name: "Studio" }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", {
-        name: "What is the total approved Q4 budget?",
-      }),
-    ).toBeVisible();
+    const prompt = await screen.findByRole("button", {
+      name: "What is the total approved Q4 budget?",
+    });
+    await waitFor(() => expect(prompt).toBeEnabled());
     expect(screen.getByText("Tap to switch")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: "Sign in as another account: Alex, Finance",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
     const workspaceNav = screen.getByRole("navigation", {
       name: "Workspace views",
     });
-    const chatTab = within(workspaceNav).getByRole("button", { name: "Chat" });
-    const studioTab = within(workspaceNav).getByRole("button", {
-      name: "Studio",
-    });
+    expect(
+      within(workspaceNav)
+        .getAllByRole("button")
+        .map((tab) => tab.textContent),
+    ).toEqual(["Sources", "Chat"]);
     expect(
       within(workspaceNav).getByRole("button", { name: "Sources" }),
     ).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(studioTab);
-    expect(studioTab).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "What is the total approved Q4 budget?",
-      }),
-    );
-    expect(chatTab).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(prompt);
     await screen.findByText("Budget answer.");
     expect(askQuestion).toHaveBeenCalledTimes(1);
     expect(askQuestion).toHaveBeenCalledWith(
@@ -327,15 +363,9 @@ describe("Authorized knowledge workspace", () => {
         screen.getByRole("textbox", { name: "Your question" }),
       ).toHaveValue(""),
     );
-    const composer = container.querySelector(".composer-wrap")!;
-    const monitor = container.querySelector(".mobile-monitor")!;
-    expect(
-      composer.compareDocumentPosition(monitor) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
-  it("retains a Studio question for retry when sending fails", async () => {
+  it("retains a suggested question for retry when sending fails", async () => {
     const askQuestion = vi.fn(async () => {
       throw new Error("Unavailable");
     });
@@ -352,7 +382,9 @@ describe("Authorized knowledge workspace", () => {
             },
           ],
           askQuestion,
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
@@ -390,7 +422,9 @@ describe("Authorized knowledge workspace", () => {
             },
           ],
           askQuestion: async () => ({ answer: "", citations: [] }),
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
@@ -410,7 +444,9 @@ describe("Authorized knowledge workspace", () => {
             throw new Error("unavailable");
           },
           askQuestion: async () => ({ answer: "", citations: [] }),
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
@@ -420,11 +456,6 @@ describe("Authorized knowledge workspace", () => {
   it("sends questions, displays cited answers, and clears the conversation", async () => {
     let submitted = "";
     let opened = "";
-    vi.stubGlobal("open", () => ({
-      opener: null,
-      location: { replace: vi.fn() },
-      close: vi.fn(),
-    }));
     render(
       <Workspace
         session={session}
@@ -448,7 +479,7 @@ describe("Authorized knowledge workspace", () => {
           },
           openDocument: async (_token, id) => {
             opened = id;
-            return "https://docs.example.com/source.md";
+            return { url: "https://docs.example.com/source.md" };
           },
         }}
       />,
@@ -481,7 +512,9 @@ describe("Authorized knowledge workspace", () => {
             throw new Error("secret provider detail");
           },
           askQuestion: async () => ({ answer: "", citations: [] }),
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
@@ -515,7 +548,9 @@ it("clears protected content immediately when account switching begins", async (
           },
         ],
         askQuestion: async () => ({ answer: "", citations: [] }),
-        openDocument: async () => "https://docs.example.com/source.md",
+        openDocument: async () => ({
+          url: "https://docs.example.com/source.md",
+        }),
       }}
     />,
   );
@@ -532,11 +567,6 @@ it("clears protected content immediately when account switching begins", async (
   expect(screen.getByRole("textbox", { name: "Your question" })).toBeDisabled();
 });
 it("displays source and provider failures without rendering internal details", async () => {
-  vi.stubGlobal("open", () => ({
-    opener: null,
-    location: { replace: vi.fn() },
-    close: vi.fn(),
-  }));
   render(
     <Workspace
       session={session}
@@ -559,8 +589,12 @@ it("displays source and provider failures without rendering internal details", a
     />,
   );
   fireEvent.click(await findPermittedDocument("Q4 budget overview"));
-  expect(await screen.findByRole("alert")).toHaveTextContent(
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(await within(reader).findByRole("alert")).toHaveTextContent(
     "source could not be opened",
+  );
+  fireEvent.click(
+    within(reader).getByRole("button", { name: "Close source content" }),
   );
   fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
     target: { value: "What changed?" },
@@ -597,7 +631,9 @@ it("rejects answers whose citations are outside the authorized listing", async (
             { document_id: "people-handbook", title: "Employee handbook" },
           ],
         }),
-        openDocument: async () => "https://docs.example.com/source.md",
+        openDocument: async () => ({
+          url: "https://docs.example.com/source.md",
+        }),
       }}
     />,
   );
@@ -615,34 +651,49 @@ it("rejects answers whose citations are outside the authorized listing", async (
   expect(screen.queryByText("Employee handbook")).not.toBeInTheDocument();
 });
 
-it("opens a citation in a separate tab so the active conversation stays open", async () => {
-  const sourceWindow = {
-    opener: window,
-    location: { replace: vi.fn() },
-    close: vi.fn(),
-  };
-  const open = vi.fn(() => sourceWindow as unknown as Window);
+const financeDocuments: DocumentSummary[] = [
+  { id: "finance-q4", title: "Q4 budget overview", department: "finance" },
+];
+const policy = [
+  "# Expense policy",
+  "",
+  "> Fictional sample.",
+  "",
+  "## 3. Travel",
+  "- **Flights**: Economy class is mandatory.",
+  "- **Lodging**: Standard business hotel cap is **200 credits/night**.",
+  "",
+  "Personal grooming is not reimbursed.",
+].join("\n");
+async function askAboutBudget(
+  citation: { excerpt?: string } = {},
+  content: string | null = policy,
+) {
+  const openDocument = vi.fn(async () => ({
+    url: "https://docs.example.com/finance/q4-budget-overview.md",
+    ...(content === null ? {} : { content }),
+  }));
+  const open = vi.fn();
   vi.stubGlobal("open", open);
   render(
     <Workspace
       session={session}
       onSwitch={async () => {}}
       api={{
-        loadDocuments: async () => [
-          {
-            id: "finance-q4",
-            title: "Q4 budget overview",
-            department: "finance",
-          },
-        ],
+        loadDocuments: async () => financeDocuments,
         askQuestion: async () => ({
           answer: "Vendor costs changed.",
           citations: [
-            { document_id: "finance-q4", title: "Q4 budget overview" },
+            {
+              document_id: "finance-q4",
+              title: "Q4 budget overview",
+              ...citation,
+            },
           ],
+          guardrail_action: "pass" as const,
+          cache_status: "hit" as const,
         }),
-        openDocument: async () =>
-          "https://docs.example.com/finance/q4-budget-overview.md",
+        openDocument,
       }}
     />,
   );
@@ -652,19 +703,252 @@ it("opens a citation in a separate tab so the active conversation stays open", a
   });
   fireEvent.click(screen.getByRole("button", { name: "Send question" }));
   expect(await screen.findByText("Vendor costs changed.")).toBeVisible();
+  return { openDocument, open };
+}
 
+it("shows a sent question at once and removes it when the answer fails", async () => {
+  let reject!: (error: Error) => void;
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => financeDocuments,
+        askQuestion: () =>
+          new Promise((_resolve, fail) => {
+            reject = fail;
+          }),
+        openDocument: async () => ({
+          url: "https://docs.example.com/source.md",
+        }),
+      }}
+    />,
+  );
+  await findPermittedDocument("Q4 budget overview");
+  const input = screen.getByRole("textbox", { name: "Your question" });
+  fireEvent.change(input, { target: { value: "What changed?" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+  const conversation = screen.getByRole("region", { name: "Conversation" });
+  expect(within(conversation).getByText("What changed?")).toBeVisible();
+  expect(within(conversation).getByRole("status")).toHaveTextContent(
+    "Checking your permitted sources",
+  );
+  await act(async () => {
+    reject(new Error("private provider input"));
+  });
+  expect(
+    within(conversation).queryByText("What changed?"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "An answer is unavailable",
+  );
+  expect(input).toHaveValue("What changed?");
+});
+
+it("shows numbered citations and per-answer status under the answer", async () => {
+  await askAboutBudget();
+  const answer = screen
+    .getByText("Vendor costs changed.")
+    .closest<HTMLElement>(".assistant-message")!;
+  expect(
+    within(answer).getByRole("button", {
+      name: "Source 1: Q4 budget overview",
+    }),
+  ).toHaveTextContent("1");
+  const card = within(answer).getByRole("button", {
+    name: "Source: Q4 budget overview",
+  });
+  expect(card).toHaveTextContent("1Q4 budget overviewFinance");
+  expect(within(answer).getByText("No PII detected")).toBeVisible();
+  expect(
+    within(answer).getByRole("status", { name: "Cached Hit" }),
+  ).toBeVisible();
+  const summary = screen.getByRole("region", { name: "This session" });
+  expect(within(summary).getByText("Answers").nextSibling).toHaveTextContent(
+    "1",
+  );
+});
+
+it("opens a folder source in the page reader without a pop-up", async () => {
+  const { openDocument, open } = await askAboutBudget();
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(reader).toHaveTextContent(
+    "Select a source or a citation to read it here.",
+  );
+  const file = screen.getByRole("button", { name: "Q4 budget overview" });
+  fireEvent.click(file);
+  expect(
+    await within(reader).findByRole("heading", {
+      name: "Q4 budget overview",
+    }),
+  ).toBeVisible();
+  expect(await within(reader).findByText("Flights")).toBeVisible();
+  expect(within(reader).getByText("Finance")).toBeVisible();
+  expect(within(reader).getByText("200 credits/night").tagName).toBe("STRONG");
+  expect(reader.querySelector("[data-cited]")).toBeNull();
+  expect(reader.innerHTML).not.toContain("**");
+  const link = within(reader).getByRole("link", {
+    name: "Open full document in a new tab",
+  });
+  expect(link).toHaveAttribute(
+    "href",
+    "https://docs.example.com/finance/q4-budget-overview.md",
+  );
+  expect(link).toHaveAttribute("target", "_blank");
+  expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  expect(openDocument).toHaveBeenCalledWith("access", "finance-q4", "en");
+  expect(open).not.toHaveBeenCalled();
+  expect(file).toHaveAttribute("aria-current", "page");
+  expect(screen.getByText("Vendor costs changed.")).toBeVisible();
+  fireEvent.click(
+    within(reader).getByRole("button", { name: "Close source content" }),
+  );
+  expect(reader).toHaveTextContent(
+    "Select a source or a citation to read it here.",
+  );
+  expect(file).toHaveFocus();
+});
+
+it("highlights the cited passage when a citation opens the reader", async () => {
+  await askAboutBudget({
+    excerpt: "dging**: Standard business hotel cap is **200 cred",
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Source 1: Q4 budget overview" }),
+  );
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(await within(reader).findByText("Source 1 · Finance")).toBeVisible();
+  const cited = reader.querySelectorAll("[data-cited]");
+  expect(cited).toHaveLength(1);
+  expect(cited[0]).toHaveTextContent(
+    "Lodging: Standard business hotel cap is 200 credits/night.",
+  );
+});
+
+it.each([
+  ["is absent", {}],
+  ["is not found in the document", { excerpt: "Text from another version" }],
+])("shows the source without a highlight when the excerpt %s", async (_, c) => {
+  await askAboutBudget(c);
   fireEvent.click(
     screen.getByRole("button", { name: "Source: Q4 budget overview" }),
   );
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(
+    await within(reader).findByText("Personal grooming is not reimbursed."),
+  ).toBeVisible();
+  expect(reader.querySelector("[data-cited]")).toBeNull();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
 
-  await waitFor(() =>
-    expect(sourceWindow.location.replace).toHaveBeenCalledWith(
-      "https://docs.example.com/finance/q4-budget-overview.md",
-    ),
+it("falls back to the new-tab link when the API returns no content", async () => {
+  await askAboutBudget({}, null);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Source: Q4 budget overview" }),
   );
-  expect(open).toHaveBeenCalledWith("about:blank", "_blank");
-  expect(sourceWindow.opener).toBeNull();
-  expect(screen.getByText("Vendor costs changed.")).toBeVisible();
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(
+    await within(reader).findByText(
+      "A preview is unavailable for this source. Open the full document instead.",
+    ),
+  ).toBeVisible();
+  expect(
+    within(reader).getByRole("heading", { name: "Q4 budget overview" }),
+  ).toBeVisible();
+  expect(
+    within(reader).getByRole("link", {
+      name: "Open full document in a new tab",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://docs.example.com/finance/q4-budget-overview.md",
+  );
+});
+
+it("rejects a non-HTTPS source link instead of rendering it", async () => {
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => financeDocuments,
+        askQuestion: async () => ({ answer: "", citations: [] }),
+        openDocument: async () => ({ url: "javascript:alert(1)" }),
+      }}
+    />,
+  );
+  fireEvent.click(await findPermittedDocument("Q4 budget overview"));
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(await within(reader).findByRole("alert")).toHaveTextContent(
+    "source could not be opened",
+  );
+  expect(within(reader).queryByRole("link")).not.toBeInTheDocument();
+});
+
+it("ignores a source response that arrives after a persona switch", async () => {
+  let resolveSource!: (source: { url: string; content: string }) => void;
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => financeDocuments,
+        askQuestion: async () => ({ answer: "", citations: [] }),
+        openDocument: () =>
+          new Promise((resolve) => {
+            resolveSource = resolve;
+          }),
+      }}
+    />,
+  );
+  fireEvent.click(await findPermittedDocument("Q4 budget overview"));
+  const reader = screen.getByRole("complementary", { name: "Source content" });
+  expect(
+    within(reader).getByRole("heading", { name: "Q4 budget overview" }),
+  ).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Sign in as another account: Sam, Operations",
+    }),
+  );
+  expect(reader).toHaveTextContent(
+    "Select a source or a citation to read it here.",
+  );
+  await act(async () => {
+    resolveSource({
+      url: "https://docs.example.com/finance/q4-budget-overview.md",
+      content: "Finance-only text",
+    });
+  });
+  expect(screen.queryByText("Finance-only text")).not.toBeInTheDocument();
+  expect(within(reader).queryByRole("link")).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("presents the reader as a labelled dialog on narrow screens", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(max-width: 1100px)",
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  await askAboutBudget();
+  const card = screen.getByRole("button", {
+    name: "Source: Q4 budget overview",
+  });
+  fireEvent.click(card);
+  const sheet = screen.getByRole("dialog", { name: "Source content" });
+  expect(sheet).toHaveAttribute("aria-modal", "true");
+  expect(
+    within(sheet).getByRole("button", { name: "Close source content" }),
+  ).toHaveFocus();
+  expect(document.getElementById("chat-panel")).toHaveAttribute("inert");
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(sheet).toHaveClass("closing");
+  await waitFor(() => expect(card).toHaveFocus());
+  expect(
+    within(sheet).queryByRole("heading", { name: "Q4 budget overview" }),
+  ).not.toBeInTheDocument();
+  expect(document.getElementById("chat-panel")).not.toHaveAttribute("inert");
 });
 
 it("retains session cost after a response without an estimate and resets on new chat", async () => {
@@ -692,7 +976,9 @@ it("retains session cost after a response without an estimate and resets on new 
           },
         ],
         askQuestion,
-        openDocument: async () => "https://docs.example.com/source.md",
+        openDocument: async () => ({
+          url: "https://docs.example.com/source.md",
+        }),
       }}
     />,
   );
@@ -706,7 +992,7 @@ it("retains session cost after a response without an estimate and resets on new 
     });
     fireEvent.click(screen.getByRole("button", { name: "Send question" }));
     await screen.findByText(answer);
-    expect(screen.getAllByText("$0.0012 est.")).toHaveLength(2);
+    expect(screen.getByText("$0.0012 est.")).toBeVisible();
   }
   fireEvent.click(screen.getByRole("button", { name: "New chat" }));
   expect(screen.queryByText("$0.0012 est.")).not.toBeInTheDocument();
@@ -730,7 +1016,9 @@ it("switches to Traditional Chinese and sends the language without changing acce
           },
         ],
         askQuestion,
-        openDocument: async () => "https://docs.example.com/source-ch.md",
+        openDocument: async () => ({
+          url: "https://docs.example.com/source-ch.md",
+        }),
       }}
     />,
   );
@@ -743,13 +1031,13 @@ it("switches to Traditional Chinese and sends the language without changing acce
   );
   expect(await findPermittedDocument("第四季預算概覽")).toBeVisible();
   expect(screen.getByRole("button", { name: /營運.*受限/ })).toBeDisabled();
+  expect(screen.getByText("切換為 Sam 才能查看與提問")).toBeVisible();
+  expect(
+    screen.getByText("以 Alex 的身分提問 · 只會搜尋財務的 1 份來源"),
+  ).toBeVisible();
   fireEvent.click(
     screen.getByRole("button", { name: "第四季核准的總預算是多少？" }),
   );
-  expect(screen.getByRole("textbox", { name: "您的問題" })).toHaveValue(
-    "第四季核准的總預算是多少？",
-  );
-  fireEvent.click(screen.getByRole("button", { name: "傳送問題" }));
   await screen.findByText("核准預算為一百萬元。");
   expect(askQuestion).toHaveBeenCalledWith(
     "access",
@@ -793,7 +1081,7 @@ it("reloads source language and ignores outdated lists while retaining the conve
           ],
     ),
     askQuestion: async () => ({ answer: "Existing answer", citations: [] }),
-    openDocument: async () => "https://docs.example.com/source.md",
+    openDocument: async () => ({ url: "https://docs.example.com/source.md" }),
   };
   render(<Workspace session={session} onSwitch={async () => {}} api={api} />);
   await findPermittedDocument("Q4 budget overview");
@@ -821,19 +1109,12 @@ it("reloads source language and ignores outdated lists while retaining the conve
   ]);
 });
 
-it("closes a pending source and ignores its URL when the language changes", async () => {
-  let resolveUrl!: (url: string) => void;
-  const sourceWindow = {
-    opener: window,
-    closed: false,
-    location: { replace: vi.fn() },
-    close: vi.fn(),
-  };
-  vi.stubGlobal("open", () => sourceWindow);
+it("closes a pending source and ignores its response when the language changes", async () => {
+  let resolveSource!: (source: { url: string; content: string }) => void;
   const openDocument = vi.fn(
     () =>
-      new Promise<string>((resolve) => {
-        resolveUrl = resolve;
+      new Promise<{ url: string; content: string }>((resolve) => {
+        resolveSource = resolve;
       }),
   );
   render(
@@ -857,10 +1138,15 @@ it("closes a pending source and ignores its URL when the language changes", asyn
   fireEvent.click(screen.getByRole("button", { name: "CH" }));
   await findPermittedDocument("第四季預算概覽");
   await act(async () => {
-    resolveUrl("https://docs.example.com/source.md");
+    resolveSource({
+      url: "https://docs.example.com/source.md",
+      content: "English text",
+    });
   });
-  expect(sourceWindow.close).toHaveBeenCalled();
-  expect(sourceWindow.location.replace).not.toHaveBeenCalled();
+  expect(screen.queryByText("English text")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: /新分頁/ }),
+  ).not.toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "第四季預算概覽" }));
   expect(openDocument).toHaveBeenLastCalledWith(
@@ -872,15 +1158,9 @@ it("closes a pending source and ignores its URL when the language changes", asyn
 
 it("uses the current document locale for a Chinese answer's citation when switching to English", async () => {
   window.localStorage.setItem("knowledge-language", "zh-TW");
-  const sourceWindow = {
-    opener: window,
-    location: { replace: vi.fn() },
-    close: vi.fn(),
-  };
-  vi.stubGlobal("open", () => sourceWindow);
-  const openDocument = vi.fn(
-    async () => "https://docs.example.com/finance/q4-budget-overview.md",
-  );
+  const openDocument = vi.fn(async () => ({
+    url: "https://docs.example.com/finance/q4-budget-overview.md",
+  }));
   render(
     <Workspace
       session={session}
@@ -916,10 +1196,13 @@ it("uses the current document locale for a Chinese answer's citation when switch
   expect(citation).toHaveTextContent("Q4 budget overview");
   expect(screen.getByText("核准預算為一百萬元。")).toBeVisible();
   fireEvent.click(citation);
-  await waitFor(() =>
-    expect(sourceWindow.location.replace).toHaveBeenCalledWith(
-      "https://docs.example.com/finance/q4-budget-overview.md",
-    ),
+  expect(
+    await screen.findByRole("link", {
+      name: "Open full document in a new tab",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://docs.example.com/finance/q4-budget-overview.md",
   );
   expect(openDocument).toHaveBeenCalledWith("access", "finance-q4", "en");
 });
@@ -988,7 +1271,9 @@ it.each(guardrailExamples)(
             { id: "source", title: "Authorized source", department },
           ],
           askQuestion,
-          openDocument: async () => "https://docs.example.com/source.md",
+          openDocument: async () => ({
+            url: "https://docs.example.com/source.md",
+          }),
         }}
       />,
     );
@@ -998,12 +1283,12 @@ it.each(guardrailExamples)(
     });
     expect(within(region).getAllByRole("button")).toHaveLength(7);
     expect(
-      within(region).getByText(
-        language === "en"
-          ? "Extra examples use fictional personal data to demonstrate the guardrail."
-          : "額外範例使用虛構個人資料，示範個人資料防護機制。",
-      ),
-    ).toBeVisible();
+      within(region).getByRole("button", { name: questions[0] }),
+    ).toHaveAccessibleDescription(
+      language === "en"
+        ? "Extra examples use fictional personal data to demonstrate the guardrail."
+        : "額外範例使用虛構個人資料，示範個人資料防護機制。",
+    );
     expect(
       within(region)
         .getAllByRole("button")

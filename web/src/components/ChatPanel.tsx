@@ -1,12 +1,35 @@
 import { useLanguage } from "../app/language";
 import { useLayoutEffect, useRef } from "react";
-import { FileText, MessageSquare, Plus, Sparkles } from "lucide-react";
-import type { ChatAnswer, Department, DocumentSummary } from "../app/api";
+import { Check, MessageSquare, Plus, Sparkles } from "lucide-react";
+import type {
+  ChatAnswer,
+  Department,
+  DocumentSummary,
+  GuardrailAction,
+} from "../app/api";
 import { identities } from "./IdentityPicker";
 export interface Message {
   question: string;
-  response: ChatAnswer;
+  /** Absent while the answer is still pending. */
+  response?: ChatAnswer;
 }
+/** A source to show in the reader, optionally with its citation context. */
+export interface SourceRequest {
+  id: string;
+  number?: number;
+  excerpt?: string;
+}
+const guardrailLabels: Record<GuardrailAction, string> = {
+  pass: "No PII detected",
+  question_pii_blocked: "Question PII blocked",
+  answer_pii_blocked: "Answer PII blocked",
+  source_pii_redacted: "Source PII masked",
+  no_sources: "PII check completed",
+  empty_answer: "PII check completed",
+  invalid_citations: "PII check completed",
+  access_denied: "Not checked · Access denied",
+  invalid_question: "Not checked · Invalid question",
+};
 export function ChatPanel({
   documents,
   name,
@@ -16,6 +39,7 @@ export function ChatPanel({
   onNew,
   onOpen,
   signedIn,
+  openedDocumentId,
 }: {
   documents: DocumentSummary[];
   name: string;
@@ -23,20 +47,23 @@ export function ChatPanel({
   messages: Message[];
   busy: boolean;
   onNew: () => void;
-  onOpen: (id: string) => void;
+  onOpen: (source: SourceRequest, opener: HTMLElement) => void;
   signedIn: boolean;
+  openedDocumentId?: string | null;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const conversationRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     const conversation = conversationRef.current;
     if (conversation && messages.length)
       conversation.scrollTop = conversation.scrollHeight;
-  }, [messages.length]);
+  }, [messages]);
   const access = identities
     .filter((person) => departments.includes(person.department))
     .map((person) => t(person.label))
     .join(" & ");
+  const accent = departments[0] ?? "finance";
+  const firstName = name.split(" ")[0];
   return (
     <>
       <div className="chat-heading">
@@ -61,64 +88,133 @@ export function ChatPanel({
         aria-label={t("Conversation")}
       >
         <div className="message-list" aria-live="polite">
-          {messages.map((message, index) => (
-            <div key={index} className="exchange">
-              <div
-                className={`message user-message ${departments[0] ?? "finance"}`}
-              >
-                <span className="avatar">{name.slice(0, 1)}</span>
-                <div>
-                  <p className="message-label">
+          {messages.map(({ question, response }, index) => {
+            const citations = (response?.citations ?? []).map(
+              (citation, position) => {
+                const document = documents.find(
+                  (doc) => doc.id === citation.document_id,
+                );
+                const department = identities.find(
+                  (person) => person.department === document?.department,
+                );
+                return {
+                  source: {
+                    id: citation.document_id,
+                    number: position + 1,
+                    excerpt: citation.excerpt,
+                  },
+                  title: t(document?.title ?? citation.title),
+                  department: department ? t(department.label) : null,
+                };
+              },
+            );
+            return (
+              <div key={index} className={`exchange ${accent}`}>
+                <div className="message user-message">
+                  <span className="sr-only">
                     {name} · {access}
-                  </p>
-                  <p className="message-text">{message.question}</p>
+                  </span>
+                  <p className="message-text">{question}</p>
                 </div>
-              </div>
-              <div
-                className={`message assistant-message${index === messages.length - 1 ? " answer-entry" : ""}`}
-              >
-                <span className="assistant-icon">
-                  <Sparkles />
-                </span>
-                <div>
-                  <div className="assistant-meta">
-                    <p className="message-label">
+                {response && (
+                  <div
+                    className={`message assistant-message${index === messages.length - 1 ? " answer-entry" : ""}`}
+                  >
+                    <span className="sr-only">
                       {t("KnowledgeLLM assistant")}
-                    </p>
-                    {message.response.cache_status === "hit" && (
-                      <span
-                        className="cache-hit"
-                        role="status"
-                        aria-label={t("Cached Hit")}
-                      >
-                        {t("Cached Hit")}
-                      </span>
-                    )}
-                  </div>
-                  <p className="message-text">{message.response.answer}</p>
-                  <div className={`citations ${departments[0] ?? "finance"}`}>
-                    {message.response.citations.map((citation) => {
-                      const title = t(
-                        documents.find((doc) => doc.id === citation.document_id)
-                          ?.title ?? citation.title,
-                      );
-                      return (
+                    </span>
+                    <p className="message-text">
+                      {response.answer}
+                      {citations.map(({ source, title }) => (
                         <button
-                          key={citation.document_id}
-                          onClick={() => onOpen(citation.document_id)}
-                          aria-label={`${t("Source:")} ${title}`}
+                          key={source.number}
+                          type="button"
+                          className="citation-marker"
+                          aria-label={
+                            language === "zh-TW"
+                              ? `來源 ${source.number}：${title}`
+                              : `Source ${source.number}: ${title}`
+                          }
+                          onClick={(event) =>
+                            onOpen(source, event.currentTarget)
+                          }
                         >
-                          <FileText size={18} />
-                          {title}
-                          <span aria-hidden="true">↗</span>
+                          {source.number}
                         </button>
-                      );
-                    })}
+                      ))}
+                    </p>
+                    {citations.length > 0 && (
+                      <div className="citations">
+                        {citations.map(({ source, title, department }) => (
+                          <button
+                            key={source.number}
+                            type="button"
+                            className="citation-card"
+                            aria-label={`${t("Source:")} ${title}`}
+                            aria-current={
+                              openedDocumentId === source.id
+                                ? "true"
+                                : undefined
+                            }
+                            onClick={(event) =>
+                              onOpen(source, event.currentTarget)
+                            }
+                          >
+                            <span className="citation-number">
+                              {source.number}
+                            </span>
+                            <span className="citation-text">
+                              <strong>{title}</strong>
+                              {department && <span>{department}</span>}
+                            </span>
+                            {openedDocumentId === source.id && (
+                              <span className="citation-open">
+                                {t("Open on the right")}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="answer-status">
+                      <span
+                        className={
+                          response.guardrail_action === "pass"
+                            ? "green"
+                            : "gold"
+                        }
+                      >
+                        {response.guardrail_action === "pass" && (
+                          <Check size={13} aria-hidden="true" />
+                        )}
+                        {t(
+                          response.guardrail_action
+                            ? guardrailLabels[response.guardrail_action]
+                            : "Result unavailable",
+                        )}
+                      </span>
+                      {response.cache_status === "hit" && (
+                        <span
+                          className="gold"
+                          role="status"
+                          aria-label={t("Cached Hit")}
+                        >
+                          {t("Cached Hit")}
+                        </span>
+                      )}
+                      {citations.length > 0 && (
+                        <span className="answer-scope">
+                          {language === "zh-TW"
+                            ? `僅根據 ${firstName} 有權限的來源作答`
+                            : `Answered only from sources ${firstName} can access`}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {busy && (
             <p role="status" className="thinking">
               <Sparkles

@@ -11,10 +11,6 @@ Metadata:
       - Chat and ingestion use the same hybrid collection and manifest identity.
       - Keep answer caching disabled until hybrid indexing and chat cutover are verified.
       - Preserve the existing dense collection for rollback; never mix vector schemas.
-    ref:
-      - at: docs/qdrant-cloud-inference-operations.md
-        has: Hybrid collection migration, verification, cache gating, and rollback procedures
-        scope: operations
 
 Parameters:
   AnswerCacheEnabled:

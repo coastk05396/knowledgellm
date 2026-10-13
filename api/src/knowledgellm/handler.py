@@ -103,7 +103,8 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
             return _response(404, {"error": "not_found"})
         except Exception:
             return _response(503, {"error": "storage_unavailable"})
-        return _response(200, {"document": {"id": link.id, "title": link.title, "url": link.url}})
+        return _response(200, {"document": {"id": link.id, "title": link.title, "url": link.url,
+                                            **({"content": link.content} if link.content is not None else {})}})
 
     if path == "/chat" and method == "POST":
         request_id = getattr(context, "aws_request_id", None)
@@ -166,7 +167,8 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
             {
                 "answer": result.answer,
                 "citations": [
-                    {"document_id": citation.document_id, "title": citation.title}
+                    {"document_id": citation.document_id, "title": citation.title,
+                     **({"excerpt": citation.excerpt} if citation.excerpt else {})}
                     for citation in result.citations
                 ],
                 "usage": usage,

@@ -292,3 +292,23 @@ def test_chinese_grounding_refusal_is_never_cached():
     from knowledgellm.chat import NO_SOURCES_ZH
     from knowledgellm.cached_chat import safe_cached_answer
     assert not safe_cached_answer(ChatAnswer(NO_SOURCES_ZH, (Citation("finance-q4-budget-overview", "Budget"),)), FINANCE, BasicGuardrails())
+
+
+def test_cache_hit_serves_citations_without_excerpt_through_the_chat_route(monkeypatch):
+    cache = Cache()
+    monkeypatch.setattr(handler, "create_answer_cache", lambda: cache)
+    monkeypatch.setattr(handler, "create_index_versions", lambda: Versions())
+    monkeypatch.setattr(handler, "create_chat_services", lambda: (Retriever(), Generator()))
+    event = {"rawPath": "/chat", "body": json.dumps({"question": QUESTION}),
+        "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}}
+
+    miss = json.loads(handler.handler(event, object())["body"])
+    hit = json.loads(handler.handler(event, object())["body"])
+
+    assert (miss["cache_status"], hit["cache_status"]) == ("miss", "hit")
+    assert miss["citations"] == [
+        {"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview", "excerpt": "Budget is $2.5M."}
+    ]
+    assert hit["citations"] == [{"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview"}]

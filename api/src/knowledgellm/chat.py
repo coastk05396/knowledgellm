@@ -15,6 +15,9 @@ NO_SOURCES_ZH = "現有文件沒有足夠資訊可以回答此問題。"
 
 NO_SOURCES = "The available documents do not contain enough information to answer."
 PII_REFUSAL = "For privacy, remove personal details from the question and try again."
+EXCERPT_MAX_CHARS = 300
+# Code points; shorter passages are too common to locate reliably by string search.
+EXCERPT_MIN_CHARS = 12
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,7 @@ class Usage:
 class Citation:
     document_id: str
     title: str
+    excerpt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,12 @@ class Generator(Protocol):
     def generate(
         self, question: str, chunks: Sequence[RetrievedChunk], language: Language = "en"
     ) -> tuple[str, list[str], Usage | None]: ...
+
+
+def excerpt_from(text: str) -> str | None:
+    """Return the longest line of a chunk, verbatim, if it is long enough to be found in the source document."""
+    line = max((line.strip() for line in text.split("\n")), key=len)
+    return line[:EXCERPT_MAX_CHARS].strip() if len(line) >= EXCERPT_MIN_CHARS else None
 
 
 def validate_question(
@@ -97,11 +107,16 @@ def answer_question(
     retrieved = retriever.search(question.strip(), authorized)
     redacted_source_count = 0
     chunks: list[RetrievedChunk] = []
+    # Only the highest-ranked chunk of a document may supply its excerpt, and only if it needed no redaction.
+    excerpts: dict[str, str | None] = {}
     for chunk in retrieved:
         if chunk.department not in authorized or chunk.document_id not in allowed_ids:
             continue
         redacted_text = guardrails.redact(chunk.text)
         redacted_source_count += redacted_text != chunk.text
+        if chunk.document_id not in excerpts:
+            excerpt = excerpt_from(chunk.text) if redacted_text == chunk.text else None
+            excerpts[chunk.document_id] = excerpt if excerpt and guardrails.redact(excerpt) == excerpt else None
         chunks.append(
             RetrievedChunk(
                 document_id=chunk.document_id,
@@ -131,7 +146,7 @@ def answer_question(
     for document_id in dict.fromkeys(cited_ids):
         document = document_for_id(document_id, language)
         if document_id in valid_ids and document is not None:
-            citations.append(Citation(document_id=document_id, title=document.title))
+            citations.append(Citation(document_id=document_id, title=document.title, excerpt=excerpts[document_id]))
     if not citations:
         return ChatAnswer(no_sources, (), usage, "invalid_citations", len(chunks), redacted_source_count)
     return ChatAnswer(
