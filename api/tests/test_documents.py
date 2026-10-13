@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -8,10 +8,15 @@ from knowledgellm.documents import AuthorizationError, list_documents, open_docu
 @dataclass
 class FakeStorage:
     calls: list[tuple[str, int]]
+    reads: list[str] = field(default_factory=list)
 
     def presigned_get_url(self, key: str, expires_in: int) -> str:
         self.calls.append((key, expires_in))
         return "https://storage.example/signed"
+
+    def read_document(self, key: str, version_id: str | None = None) -> str:
+        self.reads.append(key)
+        return f"# contents of {key}\n"
 
 
 def test_listing_contains_only_authorized_document_metadata() -> None:
@@ -143,3 +148,51 @@ def test_markdown_presigned_url_has_utf8_inline_headers_and_short_expiry():
             assert ExpiresIn == 120
             return "signed-url"
     assert S3DocumentStorage("same-bucket", Client()).presigned_get_url("finance/expense-policy-ch.md", 120) == "signed-url"
+
+
+@pytest.mark.parametrize("language,key", [
+    ("en", "finance/expense-policy.md"), ("zh-TW", "finance/expense-policy-ch.md"),
+])
+def test_document_open_returns_content_of_the_linked_source(language, key) -> None:
+    storage = FakeStorage(calls=[])
+
+    link = open_document("finance-expense-policy", frozenset({"finance"}), storage, language)
+
+    assert link.content == f"# contents of {key}\n"
+    assert storage.reads == [key] == [call[0] for call in storage.calls]
+
+
+@pytest.mark.parametrize("document_id", ["people-leave-policy", "no-such-document"])
+def test_document_open_reads_no_content_for_forbidden_or_unknown_documents(document_id) -> None:
+    storage = FakeStorage(calls=[])
+
+    with pytest.raises(AuthorizationError):
+        open_document(document_id, frozenset({"finance"}), storage)
+
+    assert storage.reads == []
+
+
+@pytest.mark.parametrize("error", [ValueError("document exceeds the maximum supported size"),
+                                   UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+                                   TimeoutError("read timed out")])
+def test_document_open_keeps_the_link_when_content_cannot_be_read(error, caplog) -> None:
+    class UnreadableStorage(FakeStorage):
+        def read_document(self, key: str, version_id: str | None = None) -> str:
+            raise error
+    caplog.set_level("INFO")
+
+    link = open_document("finance-expense-policy", frozenset({"finance"}), UnreadableStorage(calls=[]))
+
+    assert link.url == "https://storage.example/signed"
+    assert link.content is None
+    assert str(error) not in caplog.text
+
+
+def test_document_open_makes_no_storage_call_of_any_kind_when_unauthorized() -> None:
+    class ForbiddenStorage:
+        def __getattr__(self, name: str):
+            raise AssertionError(f"storage.{name} must not be used")
+
+    for document_id in ("people-leave-policy", "no-such-document"):
+        with pytest.raises(AuthorizationError):
+            open_document(document_id, frozenset({"finance"}), ForbiddenStorage())

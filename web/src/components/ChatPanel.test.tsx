@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ChatPanel } from "./ChatPanel";
 import { LanguageProvider, LanguageSwitch } from "../app/language";
@@ -54,9 +54,14 @@ describe("ChatPanel cache status", () => {
     const { rerender } = render(<ChatPanel {...props} />);
     const badge = screen.getByRole("status", { name: "Cached Hit" });
     expect(badge).toBeVisible();
-    expect(badge.closest(".assistant-meta")).toContainElement(
-      screen.getByText("KnowledgeLLM assistant"),
+    expect(badge.closest(".assistant-message")).toContainElement(
+      screen.getByText("Answer"),
     );
+    expect(
+      within(badge.closest<HTMLElement>(".answer-status")!).getByText(
+        "Result unavailable",
+      ),
+    ).toBeVisible();
 
     rerender(
       <ChatPanel

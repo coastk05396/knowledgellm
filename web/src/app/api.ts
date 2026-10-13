@@ -21,9 +21,18 @@ export type GuardrailAction = (typeof guardrailActions)[number];
 function isGuardrailAction(value: unknown): value is GuardrailAction {
   return guardrailActions.some((action) => action === value);
 }
+export interface Citation {
+  document_id: string;
+  title: string;
+  excerpt?: string;
+}
+export interface SourceDocument {
+  url: string;
+  content?: string;
+}
 export interface ChatAnswer {
   answer: string;
-  citations: { document_id: string; title: string }[];
+  citations: Citation[];
   usage?: { total_tokens?: number };
   cost_usd?: number;
   guardrail_action?: GuardrailAction;
@@ -36,7 +45,11 @@ export interface KnowledgeApi {
     question: string,
     language?: Language,
   ): Promise<ChatAnswer>;
-  openDocument(token: string, id: string, language?: Language): Promise<string>;
+  openDocument(
+    token: string,
+    id: string,
+    language?: Language,
+  ): Promise<SourceDocument>;
 }
 async function request(
   path: string,
@@ -89,14 +102,20 @@ export const knowledgeApi: KnowledgeApi = {
       !Array.isArray(data.citations)
     )
       throw new Error("Invalid answer");
-    const citations = data.citations.map((citation: unknown) => {
+    const citations = data.citations.map((citation: unknown): Citation => {
       if (
         !isRecord(citation) ||
         typeof citation.document_id !== "string" ||
         typeof citation.title !== "string"
       )
         throw new Error("Invalid citation");
-      return { document_id: citation.document_id, title: citation.title };
+      return {
+        document_id: citation.document_id,
+        title: citation.title,
+        ...(typeof citation.excerpt === "string" && citation.excerpt
+          ? { excerpt: citation.excerpt }
+          : {}),
+      };
     });
     return {
       answer: data.answer,
@@ -129,6 +148,11 @@ export const knowledgeApi: KnowledgeApi = {
       new URL(data.document.url).protocol !== "https:"
     )
       throw new Error("Invalid document link");
-    return data.document.url;
+    return {
+      url: data.document.url,
+      ...(typeof data.document.content === "string" && data.document.content
+        ? { content: data.document.content }
+        : {}),
+    };
   },
 };

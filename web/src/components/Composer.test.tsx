@@ -12,6 +12,7 @@ describe("Composer", () => {
         busy={false}
         name="Alex"
         access="Finance"
+        sourceCount={2}
       />,
     );
     const textarea = screen.getByRole("textbox", { name: "Your question" });

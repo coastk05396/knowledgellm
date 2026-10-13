@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -6,6 +7,8 @@ from functools import lru_cache
 Language = Literal["en", "zh-TW"]
 
 MAX_DOCUMENT_BYTES = 1_000_000
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,7 @@ class DocumentLink:
     id: str
     title: str
     url: str
+    content: str | None = None
 
 
 class DocumentStorage(Protocol):
@@ -72,8 +76,15 @@ def open_document(
     document = document_for_id(document_id, language)
     if document is None or document.department not in departments:
         raise AuthorizationError
-    url = storage.presigned_get_url(source_key_for_id(document.id, language), expires_in=120)
-    return DocumentLink(id=document.id, title=document.title, url=url)
+    key = source_key_for_id(document.id, language)
+    url = storage.presigned_get_url(key, expires_in=120)
+    try:
+        content: str | None = storage.read_document(key)
+    except Exception:
+        # The link still opens the document; never log the error text, which may quote document data.
+        logger.info("document_content_unavailable document_id=%s", document.id)
+        content = None
+    return DocumentLink(id=document.id, title=document.title, url=url, content=content)
 
 
 def source_key_for_id(document_id: str, language: Language = "en") -> str:

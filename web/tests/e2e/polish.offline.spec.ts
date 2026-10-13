@@ -105,18 +105,21 @@ for (const width of [320, 390, 768, 1440]) {
       scrollWidth: document.documentElement.scrollWidth,
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
-    if (width <= 760) {
-      await page.getByRole("button", { name: "Studio", exact: true }).click();
-      await expect(
-        page
-          .locator(".suggestion-rail")
-          .getByText("Open Sources to select a persona and sign in."),
-      ).toBeVisible();
-    } else {
-      await expect(
-        page.getByText("Select a persona above to sign in and use Studio."),
-      ).toBeVisible();
-    }
+    await expect(
+      page.getByRole("button", { name: "Studio", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(
+        width <= 760
+          ? "Open Sources to select a persona and sign in."
+          : "Select a persona above to sign in.",
+      ),
+    ).toBeVisible();
+    await expect(page.locator(".composer-scope")).toHaveText(
+      "Protected documents · Sign-in required",
+    );
+    for (const chip of await page.locator(".suggestion-chips button").all())
+      await expect(chip).toBeDisabled();
   });
 }
 

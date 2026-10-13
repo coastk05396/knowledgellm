@@ -5,18 +5,34 @@ import {
   useLanguage,
   type Language,
 } from "./language";
-import { useEffect, useRef, useState } from "react";
-import { Folder, MessageSquare, Sparkles, Terminal } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { Folder, MessageSquare, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
-import { knowledgeApi, type DocumentSummary, type KnowledgeApi } from "./api";
+import {
+  knowledgeApi,
+  type DocumentSummary,
+  type KnowledgeApi,
+  type SourceDocument,
+} from "./api";
 import { IdentityPicker, identities } from "../components/IdentityPicker";
 import { DepartmentFolders } from "../components/DepartmentFolders";
-import { ChatPanel, type Message } from "../components/ChatPanel";
+import {
+  ChatPanel,
+  type Message,
+  type SourceRequest,
+} from "../components/ChatPanel";
 import { Composer } from "../components/Composer";
 import { SystemMonitor } from "../components/SystemMonitor";
 import { SuggestedQuestions } from "../components/SuggestedQuestions";
+import { SourceReader } from "../components/SourceReader";
 import { Toast } from "../components/Toast";
 import "../styles/tokens.css";
 import "../styles/app.css";
@@ -26,6 +42,18 @@ interface WorkspaceProps {
   api?: KnowledgeApi;
   authLoading?: boolean;
   authError?: string | null;
+}
+/** Below the three-column breakpoint the reader is a modal bottom sheet. */
+const sheetQuery = "(max-width: 1100px)";
+function useSheetLayout(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      const query = window.matchMedia?.(sheetQuery);
+      query?.addEventListener("change", notify);
+      return () => query?.removeEventListener("change", notify);
+    },
+    () => window.matchMedia?.(sheetQuery).matches ?? false,
+  );
 }
 function WorkspaceContent({
   session,
@@ -45,36 +73,63 @@ function WorkspaceContent({
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
-  const [chatFailed, setChatFailed] = useState(false);
   const [suggestion, setSuggestion] = useState<{ question: string } | null>(
     null,
   );
-  const [cost, setCost] = useState<number | null>(null);
-  const [mobileView, setMobileView] = useState<"sources" | "chat" | "studio">(
-    "sources",
-  );
+  const [mobileView, setMobileView] = useState<"sources" | "chat">("sources");
   const [mobileMotion, setMobileMotion] = useState(false);
-  const [openedDocumentId, setOpenedDocumentId] = useState<string | null>(null);
+  const [reader, setReader] = useState<
+    | (SourceRequest & {
+        request: number;
+        document?: SourceDocument;
+        failed?: boolean;
+      })
+    | null
+  >(null);
+  const [readerClosing, setReaderClosing] = useState(false);
   const documentGeneration = useRef(0);
-  const pendingSourceWindows = useRef(new Set<Window>());
+  const readerRequest = useRef(0);
+  const readerOpener = useRef<HTMLElement | null>(null);
+  const restoreFocus = useRef(false);
+  const sheetLayout = useSheetLayout();
+  /** Drops the open source and makes any in-flight source response stale. */
+  const clearReader = useCallback(() => {
+    readerRequest.current++;
+    setReader(null);
+    setReaderClosing(false);
+  }, []);
+  const closeReader = useCallback(() => {
+    restoreFocus.current = true;
+    clearReader();
+  }, [clearReader]);
+  /** The sheet leaves with an exit transition; the column closes at once. */
+  const dismissReader = useCallback(() => {
+    if (sheetLayout) setReaderClosing(true);
+    else closeReader();
+  }, [sheetLayout, closeReader]);
+  useEffect(() => {
+    // A pending exit must not outlive a switch between sheet and column.
+    setReaderClosing(false);
+  }, [sheetLayout]);
+  useEffect(() => {
+    if (reader || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    readerOpener.current?.focus();
+  }, [reader]);
   useEffect(() => {
     setSuggestion(null);
     setMessages([]);
-    setChatFailed(false);
-    setCost(null);
     setError(null);
-    setOpenedDocumentId(null);
   }, [session, api]);
   useEffect(() => {
     const generation = ++documentGeneration.current;
     let active = true;
     setDocuments([]);
     setError(null);
+    clearReader();
     const invalidate = () => {
       active = false;
       documentGeneration.current++;
-      pendingSourceWindows.current.forEach((source) => source.close());
-      pendingSourceWindows.current.clear();
     };
     setDocumentsLoadedFor(null);
     if (!session) {
@@ -101,7 +156,7 @@ function WorkspaceContent({
           setLoading(false);
       });
     return invalidate;
-  }, [session, api, language]);
+  }, [session, api, language, clearReader]);
   const departments = identities
     .filter((person) =>
       documents.some((doc) => doc.department === person.department),
@@ -118,40 +173,44 @@ function WorkspaceContent({
     .filter((person) => departments.includes(person.department))
     .map((person) => t(person.label))
     .join(" & ");
-  const openDocument = async (id: string) => {
-    if (!session || loading || !documents.some((doc) => doc.id === id)) {
+  const answered = messages.flatMap((message) => message.response ?? []);
+  const costs = answered.flatMap((response) => response.cost_usd ?? []);
+  const cost = costs.length
+    ? costs.reduce((total, value) => total + value, 0)
+    : null;
+  const openSource = async (source: SourceRequest, opener: HTMLElement) => {
+    if (!session || loading || !documents.some((doc) => doc.id === source.id)) {
       setError("This source is not available to your account.");
       return;
     }
-    const sourceWindow = window.open("about:blank", "_blank");
-    if (!sourceWindow) {
-      setError(
-        "Your browser blocked the source window. Allow pop-ups and retry.",
-      );
-      return;
-    }
-    sourceWindow.opener = null;
     const generation = documentGeneration.current;
-    pendingSourceWindows.current.add(sourceWindow);
+    const request = ++readerRequest.current;
+    const current = () =>
+      generation === documentGeneration.current &&
+      request === readerRequest.current;
+    readerOpener.current = opener;
+    setReader({ ...source, request });
+    setReaderClosing(false);
     try {
-      const url = await api.openDocument(session.accessToken, id, language);
-      if (generation !== documentGeneration.current) return;
-      if (new URL(url).protocol !== "https:")
+      const document = await api.openDocument(
+        session.accessToken,
+        source.id,
+        language,
+      );
+      if (!current()) return;
+      if (new URL(document.url).protocol !== "https:")
         throw new Error("Invalid source URL");
-      sourceWindow.location.replace(url);
-      setOpenedDocumentId(id);
+      setReader({ ...source, request, document });
     } catch {
-      sourceWindow.close();
-      if (generation === documentGeneration.current)
-        setError("The source could not be opened. Please try again.");
-    } finally {
-      pendingSourceWindows.current.delete(sourceWindow);
+      if (current()) setReader({ ...source, request, failed: true });
     }
   };
   const send = async (question: string) => {
     if (!session || !documents.length || busy) return false;
+    // Shown at once; matched by identity so a cleared conversation stays clear.
+    const pending: Message = { question };
+    setMessages((current) => [...current, pending]);
     setBusy(true);
-    setChatFailed(false);
     setError(null);
     try {
       const response = await api.askQuestion(
@@ -166,15 +225,16 @@ function WorkspaceContent({
         )
       )
         throw new Error("Unknown citation");
-      setMessages((current) => [...current, { question, response }]);
-      setCost((current) =>
-        response.cost_usd === undefined
-          ? current
-          : (current ?? 0) + response.cost_usd,
+      setMessages((current) =>
+        current.map((message) =>
+          message === pending ? { question, response } : message,
+        ),
       );
       return true;
     } catch {
-      setChatFailed(true);
+      setMessages((current) =>
+        current.filter((message) => message !== pending),
+      );
       setError(
         "An answer is unavailable right now. Please try your question again.",
       );
@@ -185,14 +245,10 @@ function WorkspaceContent({
   };
   const switchAccount = (department?: string) => {
     documentGeneration.current++;
-    pendingSourceWindows.current.forEach((source) => source.close());
-    pendingSourceWindows.current.clear();
+    clearReader();
     setDocuments([]);
     setSuggestion(null);
     setMessages([]);
-    setChatFailed(false);
-    setCost(null);
-    setOpenedDocumentId(null);
     setMobileMotion(false);
     setMobileView("sources");
     setError(null);
@@ -201,15 +257,18 @@ function WorkspaceContent({
   const selectSuggestion = async (question: string) => {
     if (!authorizedListing || loading || !documents.length || busy) return;
     setSuggestion({ question });
-    setMobileMotion(false);
-    setMobileView("chat");
     if (await send(question)) setSuggestion(null);
   };
+  const readerDocument = documents.find((doc) => doc.id === reader?.id);
+  // The background is usable again as soon as the sheet starts to leave.
+  const sheetOpen =
+    sheetLayout && !readerClosing && Boolean(reader && readerDocument);
   return (
     <div className="workspace" data-mobile-motion={mobileMotion}>
       <header
         className="brand-bar"
         data-mobile-active={mobileView === "sources"}
+        inert={sheetOpen}
       >
         <a className="brand" href="/" aria-label={t("KnowledgeLLM home")}>
           <span className="brand-mark">
@@ -229,61 +288,25 @@ function WorkspaceContent({
         className="sidebar"
         data-mobile-panel="sources"
         data-mobile-active={mobileView === "sources"}
+        inert={sheetOpen}
       >
         <DepartmentFolders
           documents={documents}
-          onOpen={(id) => {
-            void openDocument(id);
+          onOpen={(id, opener) => {
+            void openSource({ id }, opener);
           }}
           loading={loading}
           authorizedListing={authorizedListing}
-          openedDocumentId={openedDocumentId}
+          openedDocumentId={reader?.id ?? null}
         />
-        <div className="desktop-monitor">
-          <SystemMonitor
-            cost={cost}
-            receivedAnswer={messages.length > 0}
-            guardrailAction={messages.at(-1)?.response.guardrail_action}
-            busy={busy}
-            failed={chatFailed}
-          />
-        </div>
-      </aside>
-      <aside
-        id="suggestions-panel"
-        className="suggestion-rail"
-        data-mobile-panel="studio"
-        data-mobile-active={mobileView === "studio"}
-        aria-labelledby="suggestions-title"
-      >
-        <div className="suggestion-heading">
-          <div>
-            <h2 id="suggestions-title">{t("Studio")}</h2>
-            <p>{t("Suggested questions")}</p>
-          </div>
-        </div>
-        {!session && (
-          <p role="status" className="guardrail-note">
-            <span className="desktop-copy">
-              {t("Select a persona above to sign in and use Studio.")}
-            </span>
-            <span className="mobile-copy">
-              {t("Open Sources to select a persona and sign in.")}
-            </span>
-          </p>
-        )}
-        <SuggestedQuestions
-          departments={departments.length ? departments : ["finance"]}
-          busy={busy}
-          disabled={!authorizedListing || loading || !documents.length}
-          onSuggestion={(question) => void selectSuggestion(question)}
-        />
+        <SystemMonitor answers={answered.length} cost={cost} />
       </aside>
       <main
         id="chat-panel"
         className="chat-area"
         data-mobile-panel="chat"
         data-mobile-active={mobileView === "chat"}
+        inert={sheetOpen}
       >
         <ChatPanel
           documents={documents}
@@ -292,21 +315,26 @@ function WorkspaceContent({
           signedIn={Boolean(session)}
           messages={messages}
           busy={busy}
+          openedDocumentId={reader?.id ?? null}
           onNew={() => {
+            clearReader();
             setSuggestion(null);
             setMessages([]);
-            setChatFailed(false);
-            setCost(null);
             setError(null);
           }}
-          onOpen={(id) => {
-            void openDocument(id);
+          onOpen={(source, opener) => {
+            void openSource(source, opener);
           }}
         />
         <div className="workspace-notices">
           {!session && (
-            <p className="mobile-copy" role="status">
-              {t("Open Sources to select a persona and sign in.")}
+            <p role="status">
+              <span className="desktop-copy">
+                {t("Select a persona above to sign in.")}
+              </span>
+              <span className="mobile-copy">
+                {t("Open Sources to select a persona and sign in.")}
+              </span>
             </p>
           )}
           {(error || authError) && (
@@ -325,6 +353,12 @@ function WorkspaceContent({
             </p>
           )}
         </div>
+        <SuggestedQuestions
+          departments={departments.length ? departments : ["finance"]}
+          busy={busy}
+          disabled={!authorizedListing || loading || !documents.length}
+          onSuggestion={(question) => void selectSuggestion(question)}
+        />
         <Composer
           onSend={send}
           suggestion={suggestion}
@@ -332,36 +366,41 @@ function WorkspaceContent({
           busy={busy}
           name={name.split(" ")[0]}
           access={access}
+          sourceCount={documents.length}
         />
-        <div className="mobile-monitor">
-          <SystemMonitor
-            cost={cost}
-            receivedAnswer={messages.length > 0}
-            guardrailAction={messages.at(-1)?.response.guardrail_action}
-            busy={busy}
-            failed={chatFailed}
-          />
-        </div>
       </main>
+      <SourceReader
+        source={
+          reader && readerDocument
+            ? {
+                ...reader,
+                title: readerDocument.title,
+                department: readerDocument.department,
+              }
+            : null
+        }
+        modal={sheetLayout}
+        closing={readerClosing}
+        onDismiss={dismissReader}
+        onClose={closeReader}
+      />
       <nav
         className="mobile-view-nav"
         data-active-view={mobileView}
         aria-label={t("Workspace views")}
+        inert={sheetOpen}
       >
         {(
           [
             ["sources", "Sources", Folder],
             ["chat", "Chat", MessageSquare],
-            ["studio", "Studio", Sparkles],
           ] as const
         ).map(([view, label, Icon]) => (
           <button
             key={view}
             className="mobile-view-button"
             type="button"
-            aria-controls={
-              view === "studio" ? "suggestions-panel" : `${view}-panel`
-            }
+            aria-controls={`${view}-panel`}
             aria-pressed={mobileView === view}
             onClick={(event) => {
               setMobileMotion(event.detail > 0);

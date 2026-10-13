@@ -131,3 +131,32 @@ def test_cache_catalog_matches_chinese_only_in_requested_language():
     assert demo_question_id(question["question_zh"], frozenset({"people"}), "zh-TW") is None
     assert cache_key(question["id"], frozenset({"finance"}), "same-index", "en") != cache_key(
         question["id"], frozenset({"finance"}), "same-index", "zh-TW")
+
+
+def test_entries_written_before_excerpts_existed_still_read_without_an_excerpt():
+    client = DynamoClient()
+    client.put_item(TableName="answers", Item={
+        "pk": {"S": "key"}, "expires_at": {"N": "400"},
+        "payload": {"S": json.dumps({
+            "schema": 1, "answer": "Budget is $2.5M.", "citation_ids": ["finance-q4-budget-overview"],
+            "guardrail_action": "pass", "retrieved_count": 1, "redacted_source_count": 0,
+        })},
+    })
+
+    result = DynamoAnswerCache("answers", client, clock=lambda: 100).get("key")
+
+    assert result is not None and result.answer == "Budget is $2.5M."
+    assert result.citations == (Citation("finance-q4-budget-overview", "", None),)
+
+
+def test_source_excerpts_are_never_persisted():
+    client = DynamoClient()
+    answer = replace(ANSWER, citations=(
+        Citation("finance-q4-budget-overview", "Q4 budget overview", "Approved total is $2.5M."),
+    ))
+    cache = DynamoAnswerCache("answers", client, clock=lambda: 100)
+
+    cache.put("key", answer)
+
+    assert "Approved total" not in client.tables["answers"]["key"]["payload"]["S"]
+    assert cache.get("key").citations[0].excerpt is None

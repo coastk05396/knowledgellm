@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 from knowledgellm.chat import RetrievedChunk, Usage, answer_question
 from knowledgellm.guardrails import BasicGuardrails
 
@@ -141,3 +143,99 @@ def test_chat_forwards_requested_language_to_generation() -> None:
         RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", "Vendor costs changed.")
     ]), ChineseGenerator(), BasicGuardrails(), "zh-TW")
     assert result.answer == "供應商費用已變更。"
+
+
+def _source_chunks(document_id: str, key: str, language: str = "en") -> tuple[str, list[RetrievedChunk]]:
+    """Chunk a real sample document exactly as ingestion does."""
+    from importlib.resources import files
+
+    from knowledgellm.documents import document_for_id
+    from knowledgellm.embedding import split_embedding_text
+    from knowledgellm.ingest import chunk_markdown
+
+    content = files("knowledgellm").joinpath("sample_docs", key).read_text(encoding="utf-8")
+    document = document_for_id(document_id, language)
+    assert document is not None
+    parts = [part for chunk in chunk_markdown(content) for part in split_embedding_text(chunk)]
+    return content, [RetrievedChunk(document_id, document.title, document.department, part) for part in parts]
+
+
+@pytest.mark.parametrize("language,key", [
+    ("en", "finance/expense-policy.md"), ("zh-TW", "finance/expense-policy-ch.md"),
+])
+def test_citation_excerpt_is_a_verbatim_passage_of_the_served_document(language, key) -> None:
+    content, chunks = _source_chunks("finance-expense-policy", key, language)
+    for ranked_first in chunks:
+        generator = FakeGenerator(citations=["finance-expense-policy"])
+
+        answer = answer_question(
+            "What changed?", frozenset({"finance"}), FakeRetriever([ranked_first, *chunks]), generator,
+            BasicGuardrails(), language,
+        )
+
+        excerpt = answer.citations[0].excerpt
+        if excerpt is None:
+            assert all(len(line.strip()) < 12 for line in ranked_first.text.split("\n"))
+            continue
+        assert len(excerpt) >= 12 and excerpt in content and excerpt in ranked_first.text
+        assert excerpt == excerpt.strip() and "\n" not in excerpt and len(excerpt) <= 300
+
+
+def test_citation_excerpt_is_capped_and_keeps_inner_whitespace() -> None:
+    long_line = "Vendor  costs\tchanged " * 20
+    chunk = RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", f"# Heading\n{long_line}\n")
+
+    answer = answer_question(
+        "What changed?", frozenset({"finance"}), FakeRetriever([chunk]),
+        FakeGenerator(citations=["finance-q4-budget-overview"]), BasicGuardrails(),
+    )
+
+    excerpt = answer.citations[0].excerpt
+    assert excerpt is not None and len(excerpt) <= 300
+    assert long_line.startswith(excerpt) and "Vendor  costs\tchanged" in excerpt
+
+
+def test_citation_excerpt_is_omitted_when_the_top_chunk_was_redacted() -> None:
+    retriever = FakeRetriever([
+        RetrievedChunk("people-employee-handbook", "Employee handbook", "people",
+                       "Reach out to people-help@northstar.internal.\nOffice hours are 9 to 5."),
+        RetrievedChunk("people-employee-handbook", "Employee handbook", "people", "Badges are required on site."),
+        RetrievedChunk("people-leave-policy", "Leave policy", "people", "Leave accrues monthly."),
+    ])
+    generator = FakeGenerator(citations=["people-employee-handbook", "people-leave-policy"])
+
+    answer = answer_question("What changed?", frozenset({"people"}), retriever, generator, BasicGuardrails())
+
+    assert answer.guardrail_action == "source_pii_redacted"
+    assert [(c.document_id, c.excerpt) for c in answer.citations] == [
+        ("people-employee-handbook", None), ("people-leave-policy", "Leave accrues monthly."),
+    ]
+
+
+def test_citation_excerpt_is_omitted_for_blank_chunks() -> None:
+    chunk = RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", " \n\t\n")
+
+    answer = answer_question(
+        "What changed?", frozenset({"finance"}), FakeRetriever([chunk]),
+        FakeGenerator(citations=["finance-q4-budget-overview"]), BasicGuardrails(),
+    )
+
+    assert answer.citations[0].excerpt is None
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("期。", None),
+    ("期。\n## 標題\n- 短", None),
+    ("ok\nEleven char\n", None),
+    ("期。\n員工每年享有十四天的特別休假。\n## 標題", "員工每年享有十四天的特別休假。"),
+    ("al.\nTwelve chars\n", "Twelve chars"),
+])
+def test_citation_excerpt_must_be_long_enough_to_identify_a_passage(text, expected) -> None:
+    chunk = RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", text)
+
+    answer = answer_question(
+        "What changed?", frozenset({"finance"}), FakeRetriever([chunk]),
+        FakeGenerator(citations=["finance-q4-budget-overview"]), BasicGuardrails(),
+    )
+
+    assert answer.citations[0].excerpt == expected

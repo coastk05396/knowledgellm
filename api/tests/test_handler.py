@@ -74,7 +74,9 @@ def test_chat_route_uses_authorizer_group_and_returns_validated_citation(monkeyp
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["answer"] == "Vendor costs changed."
-    assert body["citations"] == [{"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview"}]
+    assert body["citations"] == [
+        {"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview", "excerpt": "Costs changed."}
+    ]
     assert body["cost_usd"] == 0.0005
 
 
@@ -238,6 +240,8 @@ def test_chinese_document_list_and_link_keep_department_acl(monkeypatch):
         def presigned_get_url(self, key, expires_in):
             calls.append((key, expires_in))
             return "https://private-source.example/signed"
+        def read_document(self, key, version_id=None):
+            return "# 費用報銷政策\n"
     monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
     monkeypatch.setattr(handler, "S3DocumentStorage", Storage)
     event = {"rawPath": "/documents", "queryStringParameters": {"language": "zh-TW"},
@@ -258,3 +262,120 @@ def test_chinese_document_list_and_link_keep_department_acl(monkeypatch):
     event["pathParameters"] = {"documentId": "people-leave-policy"}
     assert handler.handler(event, object())["statusCode"] == 404
     assert len(calls) == 1
+
+
+def _document_event(document_id: str, groups: str) -> dict[str, object]:
+    return {"rawPath": f"/documents/{document_id}", "pathParameters": {"documentId": document_id},
+        "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": groups
+        }}}}}
+
+
+class ContentStorage:
+    reads: list[str] = []
+
+    def __init__(self, bucket):
+        pass
+
+    def presigned_get_url(self, key, expires_in):
+        return "https://private-source.example/signed"
+
+    def read_document(self, key, version_id=None):
+        ContentStorage.reads.append(key)
+        return "# Expense policy\n\nReceipts are required above $25.\n"
+
+
+def test_document_route_returns_content_to_authorized_caller(monkeypatch):
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", ContentStorage)
+
+    response = handler.handler(_document_event("finance-expense-policy", '["finance"]'), object())
+
+    assert response["statusCode"] == 200
+    assert json.loads(response["body"]) == {"document": {
+        "id": "finance-expense-policy", "title": "Expense policy",
+        "url": "https://private-source.example/signed",
+        "content": "# Expense policy\n\nReceipts are required above $25.\n",
+    }}
+
+
+def test_document_route_gives_forbidden_and_unknown_documents_the_same_contentless_response(monkeypatch):
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", ContentStorage)
+    ContentStorage.reads.clear()
+
+    forbidden = handler.handler(_document_event("finance-expense-policy", '["people"]'), object())
+    unknown = handler.handler(_document_event("no-such-document", '["people"]'), object())
+
+    assert forbidden == unknown
+    assert forbidden["statusCode"] == 404
+    assert json.loads(forbidden["body"]) == {"error": "not_found"}
+    assert ContentStorage.reads == []
+
+
+def test_document_route_still_opens_the_link_when_content_read_fails(monkeypatch, caplog):
+    class UnreadableStorage(ContentStorage):
+        def read_document(self, key, version_id=None):
+            raise ValueError("private storage detail")
+    caplog.set_level("INFO")
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", UnreadableStorage)
+
+    response = handler.handler(_document_event("finance-expense-policy", '["finance"]'), object())
+
+    assert response["statusCode"] == 200
+    assert json.loads(response["body"]) == {"document": {
+        "id": "finance-expense-policy", "title": "Expense policy", "url": "https://private-source.example/signed",
+    }}
+    assert "private storage detail" not in caplog.text
+
+
+def test_document_route_is_unavailable_only_when_the_link_cannot_be_produced(monkeypatch):
+    class UnlinkableStorage(ContentStorage):
+        def presigned_get_url(self, key, expires_in):
+            raise RuntimeError("private storage detail")
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", UnlinkableStorage)
+
+    response = handler.handler(_document_event("finance-expense-policy", '["finance"]'), object())
+
+    assert response["statusCode"] == 503
+    assert json.loads(response["body"]) == {"error": "storage_unavailable"}
+
+
+def test_document_route_makes_no_storage_call_for_forbidden_or_unknown_ids(monkeypatch):
+    class ForbiddenStorage:
+        def __init__(self, bucket):
+            pass
+        def __getattr__(self, name):
+            raise AssertionError(f"storage.{name} must not be used")
+    monkeypatch.setenv("DOCUMENTS_BUCKET", "same-bucket")
+    monkeypatch.setattr(handler, "S3DocumentStorage", ForbiddenStorage)
+
+    forbidden = handler.handler(_document_event("finance-expense-policy", '["people"]'), object())
+    unknown = handler.handler(_document_event("no-such-document", '["people"]'), object())
+
+    assert forbidden == unknown
+    assert (forbidden["statusCode"], json.loads(forbidden["body"])) == (404, {"error": "not_found"})
+
+
+def test_chat_route_returns_excerpt_only_when_one_is_available(monkeypatch):
+    class Retriever:
+        def __init__(self, text):
+            self.text = text
+        def search(self, question, departments):
+            return [RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", self.text)]
+    event = {"rawPath": "/chat", "body": '{"question":"What changed in budget?"}',
+        "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
+            "token_use": "access", "cognito:groups": '["finance"]'
+        }}}}}
+
+    monkeypatch.setattr(handler, "create_chat_services", lambda: (Retriever("\n  Costs changed.  \n"), FakeGenerator()))
+    plain = json.loads(handler.handler(event, object())["body"])
+    monkeypatch.setattr(handler, "create_chat_services", lambda: (Retriever("Ask cfo@example.test."), FakeGenerator()))
+    redacted = json.loads(handler.handler(event, object())["body"])
+
+    assert plain["citations"] == [
+        {"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview", "excerpt": "Costs changed."}
+    ]
+    assert redacted["citations"] == [{"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview"}]

@@ -1,9 +1,11 @@
 import { useLanguage } from "../app/language";
+import { ShieldCheck } from "lucide-react";
 import type { Department } from "../app/api";
 import demoQuestions from "../../../api/src/knowledgellm/demo_questions.json";
 import guardrailQuestions from "../data/guardrail-questions.json";
 import { identities } from "./IdentityPicker";
 
+/** Guardrail demonstrations follow each department's document questions. */
 const suggestedQuestions = [...demoQuestions, ...guardrailQuestions];
 
 export function SuggestedQuestions({
@@ -19,35 +21,41 @@ export function SuggestedQuestions({
 }) {
   const { t, language } = useLanguage();
   return (
-    <div className="suggestion-groups">
+    <div className="suggestion-row">
       {departments.map((department) => (
         <section
           key={department}
-          className={`question-suggestions ${department}`}
+          className={`suggestion-chips ${department}`}
           aria-label={`${t(identities.find((person) => person.department === department)?.label ?? "")} ${t("suggested questions")}`}
         >
-          <div className="suggestion-buttons">
-            {suggestedQuestions
-              .filter((item) => item.department === department)
-              .map(({ id, question, question_zh }) => (
+          {suggestedQuestions
+            .filter((item) => item.department === department)
+            .map(({ id, question, question_zh }) => {
+              const guardrail = id.startsWith("guardrail-");
+              const text = language === "zh-TW" ? question_zh : question;
+              return (
                 <button
                   key={id}
                   type="button"
-                  className={
-                    id.startsWith("guardrail-")
-                      ? "guardrail-question"
-                      : undefined
+                  className={guardrail ? "guardrail-question" : undefined}
+                  aria-describedby={
+                    guardrail ? `guardrail-note-${department}` : undefined
                   }
                   disabled={busy || disabled}
-                  onClick={() =>
-                    onSuggestion(language === "zh-TW" ? question_zh : question)
-                  }
+                  onFocus={(event) => {
+                    const chip = event.currentTarget;
+                    const row = chip.parentElement;
+                    if (row)
+                      row.scrollLeft = chip.offsetLeft - row.offsetLeft - 4;
+                  }}
+                  onClick={() => onSuggestion(text)}
                 >
-                  {language === "zh-TW" ? question_zh : question}
+                  {guardrail && <ShieldCheck size={14} aria-hidden="true" />}
+                  {text}
                 </button>
-              ))}
-          </div>
-          <p className="guardrail-note">
+              );
+            })}
+          <p id={`guardrail-note-${department}`} className="guardrail-note">
             {t(
               "Extra examples use fictional personal data to demonstrate the guardrail.",
             )}
