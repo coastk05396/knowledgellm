@@ -79,6 +79,7 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 ## Deployment and Demo Checklist
 
 - The deployment workflow publishes to the existing `knowledgellm` Cloudflare Pages project; project creation is a one-time setup step.
+- The Terraform deployment allows only `https://rag.rickchen.si` as the API CORS origin and only `https://rag.rickchen.si/` as the Cognito callback and logout URL.
 
 - [ ] Reconfirm account allowances, provider quotas/data handling, billing alerts, and current usage before additional deployment.
 - [ ] Deploy the frontend to Cloudflare Pages using README setup instructions; configure public frontend variables and matching API CORS/authentication origins.

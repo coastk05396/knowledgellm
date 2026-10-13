@@ -26,19 +26,19 @@ variable "cognito_domain_prefix" {
 variable "web_origin" {
   description = "Browser origin allowed to call the API."
   type        = string
-  default     = "http://localhost:5173"
+  default     = "https://rag.rickchen.si"
 }
 
 variable "web_callback_url" {
   description = "Exact Cognito OAuth callback URL."
   type        = string
-  default     = "http://localhost:5173/"
+  default     = "https://rag.rickchen.si/"
 }
 
 variable "web_logout_url" {
   description = "Exact Cognito post-logout URL."
   type        = string
-  default     = "http://localhost:5173/"
+  default     = "https://rag.rickchen.si/"
 }
 
 variable "qdrant_url" {
