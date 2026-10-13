@@ -152,7 +152,7 @@ rtk proxy .venv/bin/python -m pytest
 
 ### 3 · Deploy Infrastructure (Terraform)
 
-From the repository root, configure `terraform.tfvars`, the S3 state backend, and backend provider secrets before deployment.
+From the repository root, configure `terraform.tfvars`, the S3 state backend, and backend provider secrets before deployment. Rebuild the Lambda packages from the current checkout before every plan. An existing ZIP can contain code from another branch; deploying it can mismatch the embedding model and index manifests and make ordinary chat requests fail while PII refusals still work.
 
 ```sh
 rtk proxy bash scripts/package-lambdas.sh
