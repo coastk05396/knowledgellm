@@ -97,7 +97,7 @@ variable "auth_lambda_package_path" {
 }
 
 variable "answer_cache_enabled" {
-  description = "Enable fixed demo-answer caching only after validating the Qdrant Cloud Inference index migration."
+  description = "Enable fixed demo-answer caching for the verified Qdrant hybrid index."
   type        = bool
-  default     = false
+  default     = true
 }
