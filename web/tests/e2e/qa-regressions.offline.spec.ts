@@ -121,3 +121,29 @@ test("clicking the opener while the sheet is leaving re-opens it", async ({
   await expect(sheet).toBeVisible();
   await expect(page.locator(".reader-panel")).not.toHaveClass(/closing/);
 });
+
+for (const language of ["EN", "CH"] as const) {
+  test(`pointer focus does not move a chip away before its click submits (${language})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signIn(page);
+    await page.getByRole("button", { name: language, exact: true }).click();
+    await expect(page.locator(".composer textarea")).toBeEnabled();
+    let requests = 0;
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/chat") requests++;
+    });
+    const chip = page.locator(".suggestion-chips button").nth(1);
+    const question = (await chip.innerText()).trim();
+    const box = (await chip.boundingBox())!;
+    const rowBefore = await chip.evaluate((el) => el.parentElement!.scrollLeft);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const rowAfter = await chip.evaluate((el) => el.parentElement!.scrollLeft);
+    await page.mouse.up();
+    expect(rowAfter).toBe(rowBefore);
+    await expect.poll(() => requests).toBe(1);
+    await expect(page.locator(".message-text").first()).toContainText(question);
+  });
+}

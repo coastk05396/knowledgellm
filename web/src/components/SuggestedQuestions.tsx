@@ -44,6 +44,8 @@ export function SuggestedQuestions({
                   disabled={busy || disabled}
                   onFocus={(event) => {
                     const chip = event.currentTarget;
+                    // Pointer focus must not move the click target before release.
+                    if (!chip.matches(":focus-visible")) return;
                     const row = chip.parentElement;
                     if (row)
                       row.scrollLeft = chip.offsetLeft - row.offsetLeft - 4;
