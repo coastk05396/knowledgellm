@@ -14,3 +14,6 @@ qdrant_url             = "https://your-cluster.example.qdrant.io"
 
 # Public fictional demo personas only. Keep false for private production content.
 demo_mode = false
+
+# Cache fixed demo answers for the verified hybrid index.
+answer_cache_enabled = true
