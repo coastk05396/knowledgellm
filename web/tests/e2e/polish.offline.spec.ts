@@ -248,6 +248,39 @@ test("reduced-motion pointer press uses opacity without scaling", async ({
   await expect(button).toHaveCSS("opacity", "1");
 });
 
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 568 },
+]) {
+  test(`compact mobile header and sign-in toast leave the composer usable at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await page.getByRole("button", { name: /another account: Alex/ }).click();
+    await expect(page.getByRole("textbox")).toBeEnabled();
+    const toast = page.locator(".toast");
+    await expect(toast).toBeVisible();
+    const header = await page.locator(".brand-bar").boundingBox();
+    const heading = await page.locator(".chat-heading").boundingBox();
+    const notification = await toast.boundingBox();
+    const composer = await page.locator(".composer-wrap").boundingBox();
+    const nav = await page.locator(".mobile-view-nav").boundingBox();
+    expect(header!.height).toBeLessThanOrEqual(210);
+    expect(heading!.height).toBeLessThanOrEqual(60);
+    expect(notification!.height).toBeLessThanOrEqual(76);
+    expect(notification!.y + notification!.height).toBeLessThanOrEqual(
+      composer!.y,
+    );
+    expect(composer!.y + composer!.height).toBeLessThanOrEqual(nav!.y);
+    await page.clock.runFor(2000);
+    await expect(toast).toHaveClass(/closing/);
+    await page.clock.runFor(140);
+    await expect(toast).toHaveCount(0);
+  });
+}
+
 for (const reduced of [false, true]) {
   for (const dismissal of ["manual", "automatic"] as const) {
     test(`toast ${dismissal} exit ${reduced ? "with reduced motion" : "with motion"}`, async ({
@@ -295,7 +328,9 @@ for (const reduced of [false, true]) {
           .getByRole("button", { name: "Dismiss notification" })
           .click();
       } else {
-        await page.clock.runFor(3820);
+        await page.clock.runFor(1819);
+        await expect(toast).not.toHaveClass(/closing/);
+        await page.clock.runFor(1);
       }
       await expect(toast).toHaveClass(/closing/);
       await expect(toast).toHaveCSS(

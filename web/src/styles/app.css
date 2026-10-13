@@ -952,20 +952,20 @@ h2 {
     font-size: 18px;
   }
   .brand-bar {
-    padding: 20px 24px 0;
+    padding: 8px 16px 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;
     gap: 0;
     flex: 0 0 auto;
   }
   .brand {
-    min-height: 54px;
-    font-size: 25px;
-    gap: 15px;
+    min-height: 44px;
+    font-size: 21px;
+    gap: 10px;
   }
   .brand-mark {
-    width: 44px;
-    height: 44px;
+    width: 34px;
+    height: 34px;
   }
   .account-button {
     justify-self: end;
@@ -973,8 +973,8 @@ h2 {
   .identity-picker {
     grid-column: 1 / -1;
     grid-row: 2;
-    margin: 20px -24px 0;
-    padding: 20px 24px 24px;
+    margin: 8px -16px 0;
+    padding: 8px 16px 10px;
     background: var(--canvas);
     border-top: 1px solid var(--border);
     display: block;
@@ -986,7 +986,7 @@ h2 {
     align-items: center;
     font-size: 11px;
     letter-spacing: 1.8px;
-    margin-bottom: 15px;
+    margin-bottom: 6px;
   }
   .desktop-only,
   .desktop-copy {
@@ -1010,17 +1010,16 @@ h2 {
   .identity-card {
     border-color: var(--border);
     background: var(--surface);
-    padding: 10px 4px;
+    padding: 6px 4px;
+    min-height: 64px;
     min-width: 0;
     flex-direction: column;
     border-radius: 11px;
-    gap: 6px;
+    gap: 3px;
     white-space: normal;
   }
   .identity-card .avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 13px;
+    display: none;
   }
   .identity-text {
     align-items: center;
@@ -1116,9 +1115,9 @@ h2 {
     min-height: 0;
   }
   .chat-heading {
-    margin: 0 24px;
-    padding: 15px 0;
-    min-height: 65px;
+    margin: 0 16px;
+    padding: 5px 0;
+    min-height: 54px;
   }
   .chat-heading h2 {
     display: flex;
@@ -1151,6 +1150,8 @@ h2 {
   }
   .new-chat {
     font-size: 11px;
+    min-height: 44px;
+    min-width: 44px;
     border: 0;
     padding: 0 3px;
     gap: 4px;
@@ -1159,7 +1160,7 @@ h2 {
     width: 15px;
   }
   .conversation {
-    padding: 26px 24px 24px;
+    padding: 14px 16px;
     min-height: 0;
   }
   .eyebrow {
@@ -1244,7 +1245,7 @@ h2 {
     font-size: 13px;
   }
   .composer-wrap {
-    padding: 14px 24px;
+    padding: 10px 16px;
   }
   .composer {
     padding: 10px;
@@ -1353,7 +1354,7 @@ h2 {
     gap: 4px;
   }
   .identity-card {
-    min-height: 36px;
+    min-height: 44px;
     padding: 4px 2px;
     flex-direction: row;
     gap: 3px;
@@ -1402,7 +1403,7 @@ h2 {
     font-size: 10px;
   }
   .chat-heading .new-chat {
-    min-height: 34px;
+    min-height: 44px;
     padding-inline: 4px;
   }
   .conversation {
@@ -1517,6 +1518,33 @@ h2 {
   align-items: center;
   justify-content: center;
   min-height: auto;
+}
+@media (max-width: 760px) {
+  .toast-container {
+    bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+    right: 16px;
+    left: 16px;
+    align-items: center;
+  }
+  .toast {
+    width: min(100%, 360px);
+    min-width: 0;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .toast-title {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .toast-subtitle {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+  .toast-close {
+    min-width: 44px;
+    min-height: 44px;
+    margin-left: 0;
+  }
 }
 @media (hover: hover) and (pointer: fine) {
   .toast-close:hover {
@@ -1652,7 +1680,10 @@ h2 {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .brand-bar .identity-picker {
-    margin-left: -24px;
+    margin-left: -16px;
+  }
+  .lang-option {
+    min-width: 44px;
   }
 }
 @media (max-width: 390px) {

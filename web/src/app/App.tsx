@@ -382,6 +382,7 @@ function ConnectedApp() {
       />
       {auth.toast && (
         <Toast
+          duration={2000}
           message={auth.toast.message}
           subtitle={auth.toast.subtitle}
           department={auth.toast.department}

@@ -26,6 +26,7 @@ Build a responsive, permission-aware document assistant for Alex / Finance, Sam 
 
 - Apply button hover styles only to fine pointers with hover support. Use subtle pointer press feedback (scale 0.985 over 120ms), preserve keyboard focus without scale animation, and replace press movement with opacity feedback for reduced motion.
 - Enter success toasts from the bottom over 180ms using opacity and an 8px translation; retain a closing phase for the 140ms reverse-path exit on dismissal or timeout. For reduced motion, use an 80ms opacity-only transition. Cancel pending timers on unmount or notification replacement.
+- Show sign-in success notifications for two seconds before the closing animation. On mobile, use a compact notification that keeps the composer and bottom navigation accessible. Compact the brand row, persona picker, and chat heading to reserve more vertical space for Chat.
 - Edge-to-edge and installed-phone support is not currently a target; defer `viewport-fit=cover` and expanded safe-area padding until that scope is selected and verified on a real phone.
 - Maintain repeatable browser regression tests for pointer/keyboard/reduced-motion feedback, toast entry/exit, and responsive layouts. Temporary authenticated previews must use the same-origin API proxy and verify real persona sign-in, authorized document loading, and locked unrelated folders through the shared preview URL; a successful homepage or Cognito login alone does not establish a working document journey.
 
