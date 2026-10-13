@@ -58,7 +58,7 @@ SUPPORTING SERVICES
   IAM → Scoped permissions · Terraform / SAM → AWS resources
 ```
 
-Cache: exactly 15 suggested questions, five-minute logical TTL, disabled by default. Custom questions bypass caching; source-version and hybrid-retrieval changes invalidate earlier entries. [Operations guide](docs/qdrant-cloud-inference-operations.md).
+Cache: exactly 15 suggested questions, five-minute logical TTL, disabled by default. Custom questions bypass caching; source-version and hybrid-retrieval changes invalidate earlier entries.
 
 ## All-AWS Reference
 
