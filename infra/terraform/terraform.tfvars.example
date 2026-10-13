@@ -1,9 +1,9 @@
 aws_region             = "ap-southeast-1"
 project_name           = "knowledgellm-demo"
 cognito_domain_prefix  = "choose-a-globally-unique-prefix"
-web_origin             = "http://localhost:5173"
-web_callback_url       = "http://localhost:5173/"
-web_logout_url         = "http://localhost:5173/"
+web_origin             = "https://rag.rickchen.si"
+web_callback_url       = "https://rag.rickchen.si/"
+web_logout_url         = "https://rag.rickchen.si/"
 qdrant_url             = "https://your-cluster.example.qdrant.io"
 
 # Optional: If left blank or omitted, Terraform automatically creates free SSM SecureString
