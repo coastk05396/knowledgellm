@@ -111,6 +111,9 @@ for (const width of [320, 390, 1440]) {
     await page.getByRole("button", { name: /another account: Sam/ }).click();
     const folder = page.locator(".folder-group.operations .folder-button");
     await expect(folder).toBeEnabled();
+    if (width <= 760) {
+      await page.getByRole("button", { name: "Sources", exact: true }).click();
+    }
     await expect(folder).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("#files-operations")).toBeHidden();
     for (const language of ["EN", "CH"] as const) {

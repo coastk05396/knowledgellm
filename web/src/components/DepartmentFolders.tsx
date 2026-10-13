@@ -14,11 +14,13 @@ export function DepartmentFolders({
   onOpen,
   loading,
   authorizedListing,
+  openedDocumentId,
 }: {
   documents: DocumentSummary[];
   onOpen: (id: string) => void;
   loading: boolean;
   authorizedListing: boolean;
+  openedDocumentId?: string | null;
 }) {
   const { t } = useLanguage();
   const [expandedDepartments, setExpandedDepartments] = useState<string[]>([]);
@@ -29,8 +31,8 @@ export function DepartmentFolders({
   return (
     <section className="folders" aria-labelledby="folders-title">
       <div className="folder-heading">
-        <h2 id="folders-title">{t("01. Department folders")}</h2>
-        <p>{t("Each folder is linked to one user")}</p>
+        <h2 id="folders-title">{t("Department folders")}</h2>
+        <p>{t("PERSONA ACCESS")}</p>
       </div>
       {loading && (
         <p
@@ -102,6 +104,9 @@ export function DepartmentFolders({
                   <button
                     type="button"
                     key={doc.id}
+                    aria-current={
+                      openedDocumentId === doc.id ? "page" : undefined
+                    }
                     onClick={() => onOpen(doc.id)}
                   >
                     <FileText size={19} />

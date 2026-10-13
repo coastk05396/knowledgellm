@@ -6,7 +6,7 @@ import {
   type Language,
 } from "./language";
 import { useEffect, useRef, useState } from "react";
-import { BookOpenText, Terminal } from "lucide-react";
+import { Folder, MessageSquare, Sparkles, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
@@ -16,6 +16,7 @@ import { DepartmentFolders } from "../components/DepartmentFolders";
 import { ChatPanel, type Message } from "../components/ChatPanel";
 import { Composer } from "../components/Composer";
 import { SystemMonitor } from "../components/SystemMonitor";
+import { SuggestedQuestions } from "../components/SuggestedQuestions";
 import { Toast } from "../components/Toast";
 import "../styles/tokens.css";
 import "../styles/app.css";
@@ -49,6 +50,10 @@ function WorkspaceContent({
     null,
   );
   const [cost, setCost] = useState<number | null>(null);
+  const [mobileView, setMobileView] = useState<"sources" | "chat" | "studio">(
+    "chat",
+  );
+  const [openedDocumentId, setOpenedDocumentId] = useState<string | null>(null);
   const documentGeneration = useRef(0);
   const pendingSourceWindows = useRef(new Set<Window>());
   useEffect(() => {
@@ -57,6 +62,7 @@ function WorkspaceContent({
     setChatFailed(false);
     setCost(null);
     setError(null);
+    setOpenedDocumentId(null);
   }, [session, api]);
   useEffect(() => {
     const generation = ++documentGeneration.current;
@@ -132,6 +138,7 @@ function WorkspaceContent({
       if (new URL(url).protocol !== "https:")
         throw new Error("Invalid source URL");
       sourceWindow.location.replace(url);
+      setOpenedDocumentId(id);
     } catch {
       sourceWindow.close();
       if (generation === documentGeneration.current)
@@ -184,8 +191,15 @@ function WorkspaceContent({
     setMessages([]);
     setChatFailed(false);
     setCost(null);
+    setOpenedDocumentId(null);
+    setMobileView("chat");
     setError(null);
     void onSwitch(department);
+  };
+  const selectSuggestion = async (question: string) => {
+    setSuggestion({ question });
+    setMobileView("chat");
+    if (await send(question)) setSuggestion(null);
   };
   return (
     <div className="workspace">
@@ -203,7 +217,12 @@ function WorkspaceContent({
           disabled={authLoading || (!session && !authConfigured)}
         />
       </header>
-      <aside className="sidebar">
+      <aside
+        id="sources-panel"
+        className="sidebar"
+        data-mobile-panel="sources"
+        data-mobile-active={mobileView === "sources"}
+      >
         <DepartmentFolders
           documents={documents}
           onOpen={(id) => {
@@ -211,36 +230,43 @@ function WorkspaceContent({
           }}
           loading={loading}
           authorizedListing={authorizedListing}
+          openedDocumentId={openedDocumentId}
         />
+        <div className="desktop-monitor">
+          <SystemMonitor
+            cost={cost}
+            receivedAnswer={messages.length > 0}
+            guardrailAction={messages.at(-1)?.response.guardrail_action}
+            busy={busy}
+            failed={chatFailed}
+          />
+        </div>
       </aside>
-      <aside className="studio-rail" aria-labelledby="studio-title">
-        <div className="studio-heading">
-          <BookOpenText aria-hidden="true" />
+      <aside
+        id="suggestions-panel"
+        className="suggestion-rail"
+        data-mobile-panel="studio"
+        data-mobile-active={mobileView === "studio"}
+        aria-labelledby="suggestions-title"
+      >
+        <div className="suggestion-heading">
           <div>
-            <p>{t("03. Notebook studio")}</p>
-            <h2 id="studio-title">{t("Studio")}</h2>
+            <h2 id="suggestions-title">{t("Studio")}</h2>
+            <p>{t("Suggested questions")}</p>
           </div>
         </div>
-        <SystemMonitor
-          cost={cost}
-          receivedAnswer={messages.length > 0}
-          guardrailAction={messages.at(-1)?.response.guardrail_action}
+        <SuggestedQuestions
+          departments={departments.length ? departments : ["finance"]}
           busy={busy}
-          failed={chatFailed}
+          onSuggestion={(question) => void selectSuggestion(question)}
         />
-        <section className="studio-context" aria-label={t("Source context")}>
-          <h3>{t("Source context")}</h3>
-          <div className="context-count">
-            {authorizedListing ? documents.length : "—"}
-          </div>
-          <p>
-            {authorizedListing
-              ? t("Authorized sources in this notebook")
-              : t("Sign in to load authorized sources")}
-          </p>
-        </section>
       </aside>
-      <main className="chat-area">
+      <main
+        id="chat-panel"
+        className="chat-area"
+        data-mobile-panel="chat"
+        data-mobile-active={mobileView === "chat"}
+      >
         <ChatPanel
           documents={documents}
           name={name}
@@ -248,7 +274,6 @@ function WorkspaceContent({
           signedIn={Boolean(session)}
           messages={messages}
           busy={busy}
-          onSuggestion={(question) => setSuggestion({ question })}
           onNew={() => {
             setSuggestion(null);
             setMessages([]);
@@ -295,6 +320,29 @@ function WorkspaceContent({
           />
         </div>
       </main>
+      <nav className="mobile-view-nav" aria-label={t("Workspace views")}>
+        {(
+          [
+            ["sources", "Sources", Folder],
+            ["chat", "Chat", MessageSquare],
+            ["studio", "Studio", Sparkles],
+          ] as const
+        ).map(([view, label, Icon]) => (
+          <button
+            key={view}
+            className="mobile-view-button"
+            type="button"
+            aria-controls={
+              view === "studio" ? "suggestions-panel" : `${view}-panel`
+            }
+            aria-pressed={mobileView === view}
+            onClick={() => setMobileView(view)}
+          >
+            <Icon aria-hidden="true" size={20} />
+            {t(label)}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

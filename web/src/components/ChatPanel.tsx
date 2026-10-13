@@ -1,10 +1,8 @@
 import { useLanguage } from "../app/language";
+import { useLayoutEffect, useRef } from "react";
 import { FileText, MessageSquare, Plus, Sparkles } from "lucide-react";
 import type { ChatAnswer, Department, DocumentSummary } from "../app/api";
 import { identities } from "./IdentityPicker";
-import demoQuestions from "../../../api/src/knowledgellm/demo_questions.json";
-import guardrailQuestions from "../data/guardrail-questions.json";
-const suggestedQuestions = [...demoQuestions, ...guardrailQuestions];
 export interface Message {
   question: string;
   response: ChatAnswer;
@@ -18,7 +16,6 @@ export function ChatPanel({
   onNew,
   onOpen,
   signedIn,
-  onSuggestion,
 }: {
   documents: DocumentSummary[];
   name: string;
@@ -28,9 +25,14 @@ export function ChatPanel({
   onNew: () => void;
   onOpen: (id: string) => void;
   signedIn: boolean;
-  onSuggestion: (question: string) => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
+  const conversationRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const conversation = conversationRef.current;
+    if (conversation && messages.length)
+      conversation.scrollTop = conversation.scrollHeight;
+  }, [messages.length]);
   const access = identities
     .filter((person) => departments.includes(person.department))
     .map((person) => t(person.label))
@@ -41,52 +43,23 @@ export function ChatPanel({
         <div>
           <h2>
             <MessageSquare className="mobile-only" />
-            {t("02. Ask KnowledgeLLM")}
+            {t("Ask KnowledgeLLM")}
           </h2>
           <span className="mobile-status">
             <span className="status-dot" />
             {t("Active")}
           </span>
-          <p>{t("Access-scoped answers with source citations")}</p>
         </div>
         <button className="new-chat" onClick={onNew} disabled={busy}>
           <Plus size={18} />
           {t("New chat")}
         </button>
       </div>
-      <section className="conversation" aria-label={t("Conversation")}>
-        {departments.map((department) => (
-          <section
-            key={department}
-            className={`question-suggestions ${department}`}
-            aria-label={`${t(identities.find((person) => person.department === department)?.label ?? "")} ${t("suggested questions")}`}
-          >
-            <h3>{t("Try a question")}</h3>
-            <div className="suggestion-buttons">
-              {suggestedQuestions
-                .filter((item) => item.department === department)
-                .map(({ id, question, question_zh }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      onSuggestion(
-                        language === "zh-TW" ? question_zh : question,
-                      )
-                    }
-                  >
-                    {language === "zh-TW" ? question_zh : question}
-                  </button>
-                ))}
-            </div>
-            <p className="guardrail-note">
-              {t(
-                "Extra examples use fictional personal data to demonstrate the guardrail.",
-              )}
-            </p>
-          </section>
-        ))}
+      <section
+        ref={conversationRef}
+        className="conversation"
+        aria-label={t("Conversation")}
+      >
         <div className="message-list" aria-live="polite">
           {messages.map((message, index) => (
             <div key={index} className="exchange">
@@ -101,7 +74,9 @@ export function ChatPanel({
                   <p className="message-text">{message.question}</p>
                 </div>
               </div>
-              <div className="message assistant-message">
+              <div
+                className={`message assistant-message${index === messages.length - 1 ? " answer-entry" : ""}`}
+              >
                 <span className="assistant-icon">
                   <Sparkles />
                 </span>
