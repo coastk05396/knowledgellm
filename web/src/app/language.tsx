@@ -37,6 +37,8 @@ const translations: Record<string, string> = {
   "Sign in to load authorized sources": "登入以載入授權來源",
   "Close Studio": "關閉工作室",
   "Suggested questions": "建議問題",
+  "Select a persona above to sign in and use Studio.":
+    "請選擇上方身分登入，即可使用工作室。",
   Active: "使用中",
   "Access-scoped answers with source citations":
     "依存取權限回答，並附上來源引用",

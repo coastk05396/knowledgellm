@@ -9,10 +9,12 @@ const suggestedQuestions = [...demoQuestions, ...guardrailQuestions];
 export function SuggestedQuestions({
   departments,
   busy,
+  disabled,
   onSuggestion,
 }: {
   departments: Department[];
   busy: boolean;
+  disabled: boolean;
   onSuggestion: (question: string) => void;
 }) {
   const { t, language } = useLanguage();
@@ -36,7 +38,7 @@ export function SuggestedQuestions({
                       ? "guardrail-question"
                       : undefined
                   }
-                  disabled={busy}
+                  disabled={busy || disabled}
                   onClick={() =>
                     onSuggestion(language === "zh-TW" ? question_zh : question)
                   }

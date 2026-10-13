@@ -160,6 +160,32 @@ it.each([
   },
 );
 describe("Authorized knowledge workspace", () => {
+  it("disables signed-out Studio prompts without creating an unusable draft", () => {
+    const askQuestion = vi.fn(async () => ({ answer: "", citations: [] }));
+    render(
+      <Workspace
+        session={null}
+        onSwitch={async () => {}}
+        api={{
+          loadDocuments: async () => [],
+          askQuestion,
+          openDocument: async () => "https://docs.example.com/source.md",
+        }}
+      />,
+    );
+    expect(
+      screen.getByText("Select a persona above to sign in and use Studio."),
+    ).toBeVisible();
+    const prompts = within(
+      screen.getByRole("region", { name: /suggested questions/ }),
+    ).getAllByRole("button");
+    prompts.forEach((prompt) => expect(prompt).toBeDisabled());
+    fireEvent.click(prompts[0]);
+    expect(screen.getByRole("textbox", { name: "Your question" })).toHaveValue(
+      "",
+    );
+    expect(askQuestion).not.toHaveBeenCalled();
+  });
   it.each([
     ["finance", "Alex", "Finance"],
     ["operations", "Sam", "Operations"],

@@ -197,6 +197,7 @@ function WorkspaceContent({
     void onSwitch(department);
   };
   const selectSuggestion = async (question: string) => {
+    if (!authorizedListing || loading || !documents.length || busy) return;
     setSuggestion({ question });
     setMobileView("chat");
     if (await send(question)) setSuggestion(null);
@@ -255,9 +256,15 @@ function WorkspaceContent({
             <p>{t("Suggested questions")}</p>
           </div>
         </div>
+        {!session && (
+          <p role="status" className="guardrail-note">
+            {t("Select a persona above to sign in and use Studio.")}
+          </p>
+        )}
         <SuggestedQuestions
           departments={departments.length ? departments : ["finance"]}
           busy={busy}
+          disabled={!authorizedListing || loading || !documents.length}
           onSuggestion={(question) => void selectSuggestion(question)}
         />
       </aside>
