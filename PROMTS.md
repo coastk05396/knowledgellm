@@ -78,6 +78,8 @@ Completed entries reflect recorded implementation evidence, not fresh checks for
 
 ## Deployment and Demo Checklist
 
+- The deployment workflow publishes to the existing `knowledgellm` Cloudflare Pages project; project creation is a one-time setup step.
+
 - [ ] Reconfirm account allowances, provider quotas/data handling, billing alerts, and current usage before additional deployment.
 - [ ] Deploy the frontend to Cloudflare Pages using README setup instructions; configure public frontend variables and matching API CORS/authentication origins.
 - [ ] Attach the custom domain and verify DNS, HTTPS, sign-in, source links, and cited chat.
