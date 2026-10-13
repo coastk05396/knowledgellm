@@ -27,6 +27,11 @@ const translations: Record<string, string> = {
   Unlocked: "已解鎖",
   "Cached Hit": "快取命中",
   "02. Ask KnowledgeLLM": "02. 詢問 KnowledgeLLM",
+  "03. Notebook studio": "03. 筆記工作室",
+  Studio: "工作室",
+  "Source context": "來源內容",
+  "Authorized sources in this notebook": "此筆記中的授權來源",
+  "Sign in to load authorized sources": "登入以載入授權來源",
   Active: "使用中",
   "Access-scoped answers with source citations":
     "依存取權限回答，並附上來源引用",

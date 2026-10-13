@@ -6,7 +6,7 @@ import {
   type Language,
 } from "./language";
 import { useEffect, useRef, useState } from "react";
-import { Terminal } from "lucide-react";
+import { BookOpenText, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
@@ -212,15 +212,33 @@ function WorkspaceContent({
           loading={loading}
           authorizedListing={authorizedListing}
         />
-        <div className="desktop-monitor">
-          <SystemMonitor
-            cost={cost}
-            receivedAnswer={messages.length > 0}
-            guardrailAction={messages.at(-1)?.response.guardrail_action}
-            busy={busy}
-            failed={chatFailed}
-          />
+      </aside>
+      <aside className="studio-rail" aria-labelledby="studio-title">
+        <div className="studio-heading">
+          <BookOpenText aria-hidden="true" />
+          <div>
+            <p>{t("03. Notebook studio")}</p>
+            <h2 id="studio-title">{t("Studio")}</h2>
+          </div>
         </div>
+        <SystemMonitor
+          cost={cost}
+          receivedAnswer={messages.length > 0}
+          guardrailAction={messages.at(-1)?.response.guardrail_action}
+          busy={busy}
+          failed={chatFailed}
+        />
+        <section className="studio-context" aria-label={t("Source context")}>
+          <h3>{t("Source context")}</h3>
+          <div className="context-count">
+            {authorizedListing ? documents.length : "—"}
+          </div>
+          <p>
+            {authorizedListing
+              ? t("Authorized sources in this notebook")
+              : t("Sign in to load authorized sources")}
+          </p>
+        </section>
       </aside>
       <main className="chat-area">
         <ChatPanel

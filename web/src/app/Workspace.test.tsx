@@ -247,6 +247,9 @@ describe("Authorized knowledge workspace", () => {
       />,
     );
     expect(
+      screen.getByRole("complementary", { name: "Studio" }),
+    ).toBeInTheDocument();
+    expect(
       await screen.findByRole("button", {
         name: "What is the total approved Q4 budget?",
       }),
