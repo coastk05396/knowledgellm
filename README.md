@@ -14,49 +14,7 @@ The demo indexes English and Traditional Chinese Markdown in `knowledgellm-qdran
 
 ## Hybrid Workflow
 
-```text
-SIGN-IN
-  React UI ⇄ Cognito ⇄ Demo-auth Lambda
-                │ access token
-                ▼
-CHAT / DOCUMENT ACCESS
-  React UI → API Gateway (JWT) → Knowledge Lambda
-                                  │
-                                  ├── Documents → Authorized S3 links → UI
-                                  │
-                                  └── Chat → Scope / PII / S3 index checks
-                                               │
-                                               ▼
-                                         DynamoDB cache
-                                          │                       │
-                                         HIT                MISS / BYPASS
-                                          │                       ▼
-                                          │     Qdrant Cloud Inference (dense + BM25 prefetch, RRF)
-                                          │                       │
-                                          │                       ▼
-                                          │     ┌────────────────────────────────────┐
-                                          │     │ Qdrant Cloud · Chunk DB            │
-                                          │     │ Chunk 1 · Chunk 2 · Chunk 3        │
-                                          │     │ Text + vector + source metadata    │
-                                          │     │ Department / version filters       │
-                                          │     └─────────────────┬──────────────────┘
-                                          │                       │ matching chunks
-                                          │                       ▼
-                                          │                 Groq → Validation
-                                          │                       ├── Eligible write → DynamoDB
-                                          ▼                       ▼
-                                        Answer + citations → UI
-
-INGESTION
-  S3 upload → EventBridge → Ingestion Lambda → Qdrant Cloud Inference
-                                  ▲                  │ vectors
-                                  │ read version     ▼
-                                  S3 ◄── Manifest ── Qdrant Chunk DB
-
-SUPPORTING SERVICES
-  Lambdas → Parameter Store (keys) / CloudWatch (logs)
-  IAM → Scoped permissions · Terraform / SAM → AWS resources
-```
+![KnowledgeLLM current deployment: Cloudflare Pages, Cognito, API Gateway, Lambda, DynamoDB cache, S3, Qdrant Cloud, and Groq](docs/architecture/current-deployment.png)
 
 Cache: exactly 15 suggested questions, five-minute logical TTL, disabled by default. Custom questions bypass caching; source-version and hybrid-retrieval changes invalidate earlier entries.
 
@@ -70,47 +28,7 @@ Proposed architecture · not deployed.
 
 **Infra:** Route 53 · Amplify Hosting · Cognito · API Gateway · S3 · EventBridge · Step Functions · IAM · KMS · CloudWatch · X-Ray · CloudTrail
 
-```text
-FRONTEND / SIGN-IN
-  Route 53 → Amplify Hosting → React UI ⇄ Cognito
-                                  │ access token
-                                  ▼
-CHAT
-  API Gateway (JWT) → Lambda (department scope)
-                          │
-                          ▼
-                 Bedrock Knowledge Bases
-                          │
-                          ▼
-                 Titan V2 (query vector)
-                          │
-                          ▼
-        ┌────────────────────────────────────┐
-        │ OpenSearch Serverless · Chunk DB   │
-        │ Chunk 1 · Chunk 2 · Chunk 3        │
-        │ Text + vector + source metadata    │
-        │ Department filters                 │
-        └─────────────────┬──────────────────┘
-                          │ matching chunks
-                          ▼
-  Input / source Guardrails → Nova Pro → Output Guardrails
-                                             │
-                                             ▼
-                              Lambda citation checks → UI
-
-INGESTION
-  S3 → EventBridge → Step Functions + Lambda
-                              │
-                              ▼
-                  Knowledge Bases ingestion → Titan V2
-                                                 │ vectors
-                                                 ▼
-                                  OpenSearch Chunk DB
-
-SUPPORTING SERVICES
-  IAM / KMS → Access / encryption
-  CloudWatch / X-Ray / CloudTrail → Logs / traces / audit
-```
+![KnowledgeLLM all-AWS reference: Amplify, Cognito, API Gateway, Lambda, Bedrock Knowledge Bases, OpenSearch Serverless, and Step Functions ingestion](docs/architecture/all-aws-reference.png)
 
 ## Security & Telemetry
 
