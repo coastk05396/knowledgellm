@@ -10,7 +10,7 @@ Permission-aware RAG demo for Finance, Operations, and People, with grounded cit
 
 The demo indexes English and Traditional Chinese Markdown in `knowledgellm-qdrant-hybrid-e5-small`: 384-dimensional `intfloat/multilingual-e5-small` dense vectors plus server-side `Qdrant/bm25` sparse vectors, fused with RRF. The former dense-only collection remains available for rollback; vectors are never mixed across collection schemas.
 
-**Infra:** Cognito · API Gateway · Lambda · S3 · EventBridge · DynamoDB · Parameter Store · IAM · CloudWatch · Terraform · AWS SAM
+**Infra:** Cloudflare Pages (web hosting, deployed by GitHub Actions) · Cognito · API Gateway · Lambda · S3 · EventBridge · DynamoDB · Parameter Store · IAM · CloudWatch · Terraform · AWS SAM
 
 ## Hybrid Workflow
 
@@ -152,7 +152,7 @@ rtk proxy .venv/bin/python -m pytest
 
 ### 3 · Deploy Infrastructure (Terraform)
 
-From the repository root, configure `terraform.tfvars`, the S3 state backend, and backend provider secrets before deployment. Rebuild the Lambda packages from the current checkout before every plan. An existing ZIP can contain code from another branch; deploying it can mismatch the embedding model and index manifests and make ordinary chat requests fail while PII refusals still work.
+From the repository root, create the S3 state bucket once with `infra/bootstrap` (its name must match the `backend "s3"` block in `infra/terraform/versions.tf`), then configure `terraform.tfvars` and the Groq and Qdrant secrets before deployment. Rebuild the Lambda packages from the current checkout before every plan. An existing ZIP can contain code from another branch; deploying it can mismatch the embedding model and index manifests and make ordinary chat requests fail while PII refusals still work.
 
 ```sh
 rtk proxy bash scripts/package-lambdas.sh
@@ -162,6 +162,12 @@ rtk proxy terraform -chdir=infra/terraform init
 rtk proxy terraform -chdir=infra/terraform plan -out=tfplan
 rtk proxy terraform -chdir=infra/terraform apply tfplan
 ```
+
+`template.yaml` is an equivalent AWS SAM definition of the same API; Terraform is the path documented here.
+
+### 4 · Deploy the Web App
+
+Pushes to `main` run `.github/workflows/deploy-pages.yml`, which tests, builds, and publishes `web/dist` to the Cloudflare Pages project `knowledgellm`. Set these repository secrets first: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI`. Add the site's origin to `web_origin` so API Gateway CORS allows it.
 
 ## License
 
