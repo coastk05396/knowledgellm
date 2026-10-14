@@ -32,17 +32,19 @@ Ask in English or 繁體中文 and get cited answers drawn only from the sources
 
 ## Architecture
 
-<img src="docs/architecture/current-deployment.png" alt="Current deployment: Cloudflare Pages, Cognito, API Gateway, Lambda, DynamoDB, S3, Qdrant Cloud, and Groq" width="100%">
+### Current deployment
+
+<img src="docs/architecture/current-deployment.gif" alt="Current deployment: Cloudflare Pages, Cognito, API Gateway, Lambda, DynamoDB, S3, Qdrant Cloud, and Groq" width="100%">
 
 1. **Sign in:** the React app on Cloudflare Pages authenticates through Cognito and receives a JWT.
 2. **Ask:** API Gateway verifies the JWT and invokes the Knowledge Lambda. It checks department scope and PII, then tries the DynamoDB cache. On a miss it runs hybrid search in Qdrant Cloud and asks Groq for a grounded answer.
 3. **Ingest:** an S3 upload triggers EventBridge and the Ingestion Lambda, which chunks, embeds, and upserts the document into Qdrant.
 
-<details>
-<summary><b>All-AWS reference architecture</b> (proposed, not deployed)</summary>
-<br>
-<img src="docs/architecture/all-aws-reference.png" alt="All-AWS reference: Amplify, Cognito, API Gateway, Lambda, Bedrock Knowledge Bases, and OpenSearch Serverless" width="100%">
-</details>
+### All-AWS reference (proposed, not deployed)
+
+<img src="docs/architecture/all-aws-reference.gif" alt="All-AWS reference: Amplify, Cognito, API Gateway, Lambda, Bedrock Knowledge Bases, and OpenSearch Serverless" width="100%">
+
+The same flow on managed AWS services only: Bedrock Knowledge Bases with Titan V2, Nova Pro, and Guardrails over OpenSearch Serverless, with Step Functions orchestrating ingestion.
 
 ## Tech Stack
 
