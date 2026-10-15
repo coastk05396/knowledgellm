@@ -42,6 +42,17 @@ def test_almost_expired_lambda_returns_safe_error_before_starting_services(monke
     monkeypatch.setattr(handler, "create_index_versions", lambda: None)
     result = handler.handler({"rawPath": "/chat", "body": json.dumps({"question": "A question"}),
         "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'}}}}}, Context())
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}}}}, Context())
     assert result["statusCode"] == 503
     assert json.loads(result["body"]) == {"error": "assistant_unavailable"}
+
+
+@pytest.fixture(autouse=True)
+def allow_chat_quota(monkeypatch):
+    from knowledgellm import handler as handler_module
+
+    class AvailableQuota:
+        def consume(self, subject):
+            assert subject == "test-subject"
+
+    monkeypatch.setattr(handler_module, "create_chat_quota", lambda: AvailableQuota())

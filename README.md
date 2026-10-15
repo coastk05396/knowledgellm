@@ -96,6 +96,8 @@ terraform -chdir=infra/terraform apply tfplan
 
 `template.yaml` is an equivalent AWS SAM definition of the same API.
 
+**Chat quota rollout.** Provision the separate encrypted DynamoDB quota table (on-demand billing, `expires_at` TTL) and its `dynamodb:UpdateItem` permission before deploying the updated Lambda with mandatory `CHAT_QUOTA_TABLE`. Terraform and SAM define these resources plus a `/chat` throttle of 1 request/second with burst 5. Valid chat requests, including cache hits, consume a shared limit of 10 requests per fixed minute per trusted JWT `sub`; visitors using the same demo persona share that quota. Exhaustion returns `429 rate_limited` with `Retry-After`; missing quota configuration or a store failure returns `503 rate_limit_unavailable`. These changes require an infrastructure rollout and are not active until deployed.
+
 **Web app (Cloudflare Pages).** Pushes to `main` run `.github/workflows/deploy-pages.yml`, which tests, builds, and publishes `web/dist`. Set these repository secrets first: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, `VITE_COGNITO_ISSUER`, `VITE_COGNITO_CLIENT_ID`, and `VITE_REDIRECT_URI`. Add the site origin to `web_origin` so API Gateway CORS allows it.
 
 **Secret scanning (Gitleaks).** `.github/workflows/gitleaks.yml` scans the full git history on every push and pull request to `main` and fails the check if a credential is found. It needs no secrets of its own.

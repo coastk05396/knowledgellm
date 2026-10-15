@@ -194,7 +194,7 @@ def test_invalid_token_is_rejected_before_cache_and_services(monkeypatch):
 def chat_event(question=QUESTION, group="finance"):
     return {"rawPath": "/chat", "body": json.dumps({"question": question}),
             "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
-                "token_use": "access", "cognito:groups": json.dumps([group])}}}}}
+                "token_use": "access", "sub": "test-subject", "cognito:groups": json.dumps([group])}}}}}
 
 
 def test_route_cache_hit_has_zero_usage_cost_and_safe_telemetry(monkeypatch, caplog):
@@ -301,7 +301,7 @@ def test_cache_hit_serves_citations_without_excerpt_through_the_chat_route(monke
     monkeypatch.setattr(handler, "create_chat_services", lambda: (Retriever(), Generator()))
     event = {"rawPath": "/chat", "body": json.dumps({"question": QUESTION}),
         "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'
         }}}}}
 
     miss = json.loads(handler.handler(event, object())["body"])
@@ -312,3 +312,14 @@ def test_cache_hit_serves_citations_without_excerpt_through_the_chat_route(monke
         {"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview", "excerpt": "Budget is $2.5M."}
     ]
     assert hit["citations"] == [{"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview"}]
+
+
+@pytest.fixture(autouse=True)
+def allow_chat_quota(monkeypatch):
+    from knowledgellm import handler as handler_module
+
+    class AvailableQuota:
+        def consume(self, subject):
+            assert subject == "test-subject"
+
+    monkeypatch.setattr(handler_module, "create_chat_quota", lambda: AvailableQuota())

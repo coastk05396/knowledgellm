@@ -13,7 +13,12 @@ async function signIn(page: Page) {
     await route.fulfill({
       json: initiating
         ? { ChallengeName: "CUSTOM_CHALLENGE", Session: "offline-challenge" }
-        : { AuthenticationResult: { AccessToken: "offline-fixture-token" } },
+        : {
+            AuthenticationResult: {
+              AccessToken: "offline-fixture-token",
+              ExpiresIn: 3600,
+            },
+          },
     });
   });
   await page.route(
