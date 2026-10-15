@@ -32,6 +32,7 @@ locals {
   qdrant_api_key_arn = var.qdrant_api_key_secret_arn != "" ? var.qdrant_api_key_secret_arn : aws_ssm_parameter.qdrant_api_key[0].arn
   groq_api_key_arn   = var.groq_api_key_secret_arn != "" ? var.groq_api_key_secret_arn : aws_ssm_parameter.groq_api_key[0].arn
   common_environment = {
+    CHAT_QUOTA_TABLE                 = aws_dynamodb_table.chat_quota.name
     ANSWER_CACHE_TABLE               = aws_dynamodb_table.answer_cache.name
     ANSWER_CACHE_ENABLED             = tostring(var.answer_cache_enabled)
     PYTHONPATH                       = "/var/task/src"
@@ -197,6 +198,21 @@ resource "aws_dynamodb_table" "answer_cache" {
   server_side_encryption { enabled = true }
 }
 
+resource "aws_dynamodb_table" "chat_quota" {
+  name         = "${var.project_name}-chat-quota"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+  server_side_encryption { enabled = true }
+}
+
 resource "aws_iam_role" "knowledge" {
   name               = "${var.project_name}-knowledge"
   assume_role_policy = local.lambda_trust_policy
@@ -213,6 +229,11 @@ resource "aws_iam_role_policy" "knowledge" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:UpdateItem"]
+        Resource = aws_dynamodb_table.chat_quota.arn
+      },
       {
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:PutItem"]
@@ -366,6 +387,11 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.knowledge.id
   name        = "$default"
   auto_deploy = true
+  route_settings {
+    route_key              = "POST /chat"
+    throttling_rate_limit  = 1
+    throttling_burst_limit = 5
+  }
 }
 
 resource "aws_lambda_permission" "api" {

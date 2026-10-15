@@ -14,7 +14,7 @@ def test_documents_route_uses_authorizer_claims_and_ignores_requested_department
         "queryStringParameters": {"department": "people"},
         "requestContext": {
             "http": {"method": "GET"},
-            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}},
         },
     }
 
@@ -65,7 +65,7 @@ def test_chat_route_uses_authorizer_group_and_returns_validated_citation(monkeyp
         "isBase64Encoded": True,
         "requestContext": {
             "http": {"method": "POST"},
-            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}},
         },
     }
 
@@ -88,7 +88,7 @@ def test_chat_logs_safe_usage_and_guardrail_metadata(monkeypatch, caplog) -> Non
         "body": '{"question":"What changed in budget?"}',
         "requestContext": {
             "http": {"method": "POST"},
-            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}},
         },
     }
 
@@ -113,7 +113,7 @@ def test_chat_logs_pii_guardrail_without_logging_question(monkeypatch, caplog) -
         "body": '{"question":"Contact alex@example.test"}',
         "requestContext": {
             "http": {"method": "POST"},
-            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}},
         },
     }
 
@@ -135,7 +135,7 @@ def test_provider_error_does_not_echo_question_or_error(monkeypatch) -> None:
         "body": '{"question":"private question"}',
         "requestContext": {
             "http": {"method": "POST"},
-            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}},
         },
     }
 
@@ -157,7 +157,7 @@ def test_provider_timeout_returns_safe_retryable_error(monkeypatch) -> None:
         "body": '{"question":"What changed in budget?"}',
         "requestContext": {
             "http": {"method": "POST"},
-            "authorizer": {"jwt": {"claims": {"token_use": "access", "cognito:groups": '["finance"]'}}},
+            "authorizer": {"jwt": {"claims": {"token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'}}},
         },
     }
 
@@ -200,7 +200,7 @@ def test_chat_rejects_unsupported_language_before_providers(monkeypatch, languag
     response = handler.handler({
         "rawPath": "/chat", "body": json.dumps({"question": "What changed?", "language": language}),
         "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'
         }}}}
     }, object())
     assert response["statusCode"] == 400
@@ -214,7 +214,7 @@ def test_traditional_chinese_provider_failure_has_safe_localized_message(monkeyp
     response = handler.handler({
         "rawPath": "/chat", "body": json.dumps({"question": "預算是多少？", "language": "zh-TW"}),
         "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'
         }}}}
     }, object())
     assert response["statusCode"] == 503
@@ -226,7 +226,7 @@ def test_traditional_chinese_provider_failure_has_safe_localized_message(monkeyp
 def test_document_routes_reject_invalid_language_before_storage(path, language):
     response = handler.handler({"rawPath": path, "queryStringParameters": {"language": language},
         "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'
         }}}}}, object())
     assert response["statusCode"] == 400
     assert json.loads(response["body"]) == {"error": "invalid_language"}
@@ -246,7 +246,7 @@ def test_chinese_document_list_and_link_keep_department_acl(monkeypatch):
     monkeypatch.setattr(handler, "S3DocumentStorage", Storage)
     event = {"rawPath": "/documents", "queryStringParameters": {"language": "zh-TW"},
         "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'
         }}}}}
     response = handler.handler(event, object())
     documents = json.loads(response["body"])["documents"]
@@ -267,7 +267,7 @@ def test_chinese_document_list_and_link_keep_department_acl(monkeypatch):
 def _document_event(document_id: str, groups: str) -> dict[str, object]:
     return {"rawPath": f"/documents/{document_id}", "pathParameters": {"documentId": document_id},
         "requestContext": {"http": {"method": "GET"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": groups
+            "token_use": "access", "sub": "test-subject", "cognito:groups": groups
         }}}}}
 
 
@@ -367,7 +367,7 @@ def test_chat_route_returns_excerpt_only_when_one_is_available(monkeypatch):
             return [RetrievedChunk("finance-q4-budget-overview", "Q4 budget overview", "finance", self.text)]
     event = {"rawPath": "/chat", "body": '{"question":"What changed in budget?"}',
         "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {
-            "token_use": "access", "cognito:groups": '["finance"]'
+            "token_use": "access", "sub": "test-subject", "cognito:groups": '["finance"]'
         }}}}}
 
     monkeypatch.setattr(handler, "create_chat_services", lambda: (Retriever("\n  Costs changed.  \n"), FakeGenerator()))
@@ -379,3 +379,14 @@ def test_chat_route_returns_excerpt_only_when_one_is_available(monkeypatch):
         {"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview", "excerpt": "Costs changed."}
     ]
     assert redacted["citations"] == [{"document_id": "finance-q4-budget-overview", "title": "Q4 budget overview"}]
+
+
+@pytest.fixture(autouse=True)
+def allow_chat_quota(monkeypatch):
+    from knowledgellm import handler as handler_module
+
+    class AvailableQuota:
+        def consume(self, subject):
+            assert subject == "test-subject"
+
+    monkeypatch.setattr(handler_module, "create_chat_quota", lambda: AvailableQuota())

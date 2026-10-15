@@ -227,6 +227,22 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  ChatQuotaTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   KnowledgeApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -256,6 +272,7 @@ Resources:
       Handler: knowledgellm.handler.handler
       Environment:
         Variables:
+          CHAT_QUOTA_TABLE: !Ref ChatQuotaTable
           ANSWER_CACHE_TABLE: !Ref AnswerCacheTable
           ANSWER_CACHE_ENABLED: !Ref AnswerCacheEnabled
       Timeout: 28
@@ -273,6 +290,9 @@ Resources:
             - Effect: Allow
               Action: [dynamodb:GetItem, dynamodb:PutItem]
               Resource: !GetAtt AnswerCacheTable.Arn
+            - Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt ChatQuotaTable.Arn
       Events:
         Health:
           Type: HttpApi
@@ -302,6 +322,9 @@ Resources:
             ApiId: !Ref KnowledgeApi
             Path: /chat
             Method: POST
+            RouteSettings:
+              ThrottlingRateLimit: 1
+              ThrottlingBurstLimit: 5
             Auth:
               Authorizer: CognitoJwt
 

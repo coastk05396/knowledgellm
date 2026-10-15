@@ -10,6 +10,7 @@ from knowledgellm.authz import departments_for_claims
 from knowledgellm.chat import Generator, Language, Retriever, validate_question
 from knowledgellm.answer_cache import create_answer_cache
 from knowledgellm.cached_chat import answer_with_cache
+from knowledgellm.chat_quota import QuotaExceeded, create_chat_quota
 from knowledgellm.index_versions import S3IndexVersions
 from knowledgellm.request_budget import chat_deadline
 from knowledgellm.documents import (
@@ -107,6 +108,9 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
                                             **({"content": link.content} if link.content is not None else {})}})
 
     if path == "/chat" and method == "POST":
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
+            return _response(401, {"error": "unauthenticated"})
         request_id = getattr(context, "aws_request_id", None)
         if not isinstance(request_id, str):
             request_id = request_context.get("requestId")
@@ -130,6 +134,15 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
                 remaining = getattr(context, "get_remaining_time_in_millis", None)
                 seconds = remaining() / 1000 - 2 if callable(remaining) else 25
                 with chat_deadline(seconds):
+                    try:
+                        create_chat_quota().consume(subject)
+                    except QuotaExceeded as error:
+                        response = _response(429, {"error": "rate_limited"})
+                        response["headers"]["retry-after"] = str(error.retry_after)
+                        return response
+                    except Exception:
+                        logger.warning("chat_quota_unavailable")
+                        return _response(503, {"error": "rate_limit_unavailable"})
                     try:
                         cache = create_answer_cache()
                     except Exception:
