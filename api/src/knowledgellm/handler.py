@@ -137,11 +137,16 @@ def handler(event: dict[str, object], context: object) -> dict[str, object]:
                     try:
                         create_chat_quota().consume(subject)
                     except QuotaExceeded as error:
+                        _log_chat_telemetry(
+                            request_id, department, started_at, status="rate_limited", guardrail_action="pass"
+                        )
                         response = _response(429, {"error": "rate_limited"})
                         response["headers"]["retry-after"] = str(error.retry_after)
                         return response
                     except Exception:
-                        logger.warning("chat_quota_unavailable")
+                        _log_chat_telemetry(
+                            request_id, department, started_at, status="rate_limit_unavailable", guardrail_action="error"
+                        )
                         return _response(503, {"error": "rate_limit_unavailable"})
                     try:
                         cache = create_answer_cache()

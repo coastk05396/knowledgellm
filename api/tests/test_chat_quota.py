@@ -60,7 +60,8 @@ def event(subject="trusted-sub"):
 
 
 @pytest.mark.parametrize("failure,status,error", [(QuotaExceeded(29), 429, "rate_limited"), (RuntimeError("sensitive details"), 503, "rate_limit_unavailable")])
-def test_blocked_quota_never_initializes_cache_index_or_services(monkeypatch, failure, status, error):
+def test_blocked_quota_never_initializes_cache_index_or_services(monkeypatch, caplog, failure, status, error):
+    caplog.set_level("INFO", logger=handler.__name__)
     class Quota:
         def consume(self, subject):
             assert subject == "trusted-sub"
@@ -72,7 +73,18 @@ def test_blocked_quota_never_initializes_cache_index_or_services(monkeypatch, fa
     monkeypatch.setattr(handler, "create_chat_quota", lambda: Quota())
     for name in ("create_chat_services", "create_answer_cache", "create_index_versions"):
         monkeypatch.setattr(handler, name, forbidden)
-    response = handler.handler(event(), object())
+    request = event()
+    request["requestContext"]["requestId"] = "request-123"
+    response = handler.handler(request, object())
+    telemetry = [json.loads(record.message) for record in caplog.records if '"event":"chat_telemetry"' in record.message]
+    assert len(telemetry) == 1
+    assert telemetry[0]["request_id"] == "request-123"
+    assert telemetry[0]["status"] == error
+    assert telemetry[0]["guardrail_action"] == ("pass" if status == 429 else "error")
+    assert telemetry[0]["department"] == "finance"
+    assert telemetry[0]["latency_ms"] >= 0
+    for sensitive in ("trusted-sub", "What changed in budget?", "sensitive details"):
+        assert sensitive not in caplog.text
     assert response["statusCode"] == status
     assert json.loads(response["body"]) == {"error": error}
     if status == 429:

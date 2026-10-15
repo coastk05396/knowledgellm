@@ -384,6 +384,7 @@ resource "aws_apigatewayv2_route" "protected" {
 }
 
 resource "aws_apigatewayv2_stage" "default" {
+  depends_on  = [aws_apigatewayv2_route.protected]
   api_id      = aws_apigatewayv2_api.knowledge.id
   name        = "$default"
   auto_deploy = true
