@@ -29,7 +29,12 @@ async function signInWithLongAnswers(page: Page, documentCount = 1) {
     await route.fulfill({
       json: initiating
         ? { ChallengeName: "CUSTOM_CHALLENGE", Session: "offline-challenge" }
-        : { AuthenticationResult: { AccessToken: "offline-fixture-token" } },
+        : {
+            AuthenticationResult: {
+              AccessToken: "offline-fixture-token",
+              ExpiresIn: 3600,
+            },
+          },
     });
   });
   await page.route(

@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -35,9 +36,30 @@ const AuthContext = createContext<AuthState | null>(null);
 let restoration: Promise<Session | null> | undefined;
 async function restoreSession(): Promise<Session | null> {
   const directSessionStr = sessionStorage.getItem("knowledge-direct-session");
-  if (directSessionStr) {
+  if (directSessionStr !== null) {
     try {
-      return JSON.parse(directSessionStr) as Session;
+      const stored: unknown = JSON.parse(directSessionStr);
+      if (
+        typeof stored === "object" &&
+        stored !== null &&
+        "accessToken" in stored &&
+        typeof stored.accessToken === "string" &&
+        stored.accessToken &&
+        "name" in stored &&
+        typeof stored.name === "string" &&
+        stored.name &&
+        "expiresAt" in stored &&
+        typeof stored.expiresAt === "number" &&
+        Number.isSafeInteger(stored.expiresAt) &&
+        stored.expiresAt > Date.now()
+      ) {
+        return {
+          accessToken: stored.accessToken,
+          name: stored.name,
+          expiresAt: stored.expiresAt,
+        };
+      }
+      sessionStorage.removeItem("knowledge-direct-session");
     } catch {
       sessionStorage.removeItem("knowledge-direct-session");
     }
@@ -73,33 +95,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastInfo | null>(null);
 
+  const authAttempt = useRef(0);
+
   const clearToast = () => setToast(null);
 
   useEffect(() => {
-    if (!userManager) return;
     let active = true;
-    const expire = () => {
-      setSession(null);
-      setError("Your session expired. Sign in again to continue.");
-    };
-    userManager.events.addAccessTokenExpired(expire);
-    restoration ??= restoreSession();
+    const attempt = authAttempt.current;
+    restoration ??= restoreSession().finally(() => {
+      restoration = undefined;
+    });
     restoration
       .then((value) => {
-        if (active) setSession(value);
+        if (active && attempt === authAttempt.current) setSession(value);
       })
       .catch(() => {
-        if (active)
+        if (active && attempt === authAttempt.current)
           setError("Sign-in could not be completed. Please try again.");
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && attempt === authAttempt.current) setLoading(false);
       });
     return () => {
       active = false;
-      userManager?.events.removeAccessTokenExpired(expire);
     };
   }, []);
+  useEffect(() => {
+    if (!userManager || !session || session.expiresAt !== undefined) return;
+    const expire = () => {
+      setSession(null);
+      setToast(null);
+      setError("Your session expired. Sign in again to continue.");
+    };
+    userManager.events.addAccessTokenExpired(expire);
+    return () => userManager?.events.removeAccessTokenExpired(expire);
+  }, [session]);
+  useEffect(() => {
+    if (session?.expiresAt === undefined) return;
+    const expiresAt = session.expiresAt;
+    let timer: ReturnType<typeof setTimeout>;
+    const checkExpiry = () => {
+      clearTimeout(timer);
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        sessionStorage.removeItem("knowledge-direct-session");
+        setSession(null);
+        setToast(null);
+        setError("Your session expired. Sign in again to continue.");
+      } else {
+        timer = setTimeout(checkExpiry, Math.min(remaining, 2_147_483_647));
+      }
+    };
+    checkExpiry();
+    window.addEventListener("focus", checkExpiry);
+    document.addEventListener("visibilitychange", checkExpiry);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", checkExpiry);
+      document.removeEventListener("visibilitychange", checkExpiry);
+    };
+  }, [session]);
   const login = async () => {
     try {
       await signIn();
@@ -108,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
   const switchAccount = async () => {
+    authAttempt.current += 1;
     setSession(null);
     setToast(null);
     setLoading(true);
@@ -122,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
   const loginAsPersona = async (department: string) => {
+    authAttempt.current += 1;
     setSession(null);
     setToast(null);
     setLoading(true);

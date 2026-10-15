@@ -85,6 +85,7 @@ describe("Cognito authentication", () => {
 describe("password-free Cognito demo authentication", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     sessionStorage.clear();
   });
   it.each([
@@ -106,10 +107,15 @@ describe("password-free Cognito demo authentication", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
-            AuthenticationResult: { AccessToken: "mock-access-token" },
+            AuthenticationResult: {
+              AccessToken: "mock-access-token",
+              ExpiresIn: 3600,
+            },
           }),
         });
       vi.stubGlobal("fetch", fetchMock);
+      vi.useFakeTimers();
+      vi.setSystemTime(1000);
       const session = await signInAsPersona(department);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       const first = fetchMock.mock.calls[0];
@@ -132,7 +138,11 @@ describe("password-free Cognito demo authentication", () => {
         Session: "mock-challenge-session",
         ChallengeResponses: { USERNAME: username, ANSWER: "demo" },
       });
-      expect(session).toEqual({ accessToken: "mock-access-token", name });
+      expect(session).toEqual({
+        accessToken: "mock-access-token",
+        name,
+        expiresAt: 3601000,
+      });
       expect(
         JSON.parse(sessionStorage.getItem("knowledge-direct-session")!),
       ).toEqual(session);
@@ -188,4 +198,32 @@ describe("password-free Cognito demo authentication", () => {
     await expect(signInAsPersona("finance")).rejects.toThrow("No access token");
     expect(sessionStorage.getItem("knowledge-direct-session")).toBeNull();
   });
+  it.each([undefined, 0, -1, "3600", null, Infinity])(
+    "rejects invalid Cognito expiry %s",
+    async (expiresIn) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+              ChallengeName: "CUSTOM_CHALLENGE",
+              Session: "session",
+            }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+              AuthenticationResult: {
+                AccessToken: "token",
+                ExpiresIn: expiresIn,
+              },
+            }),
+          }),
+      );
+      await expect(signInAsPersona("finance")).rejects.toThrow("expiry");
+      expect(sessionStorage.getItem("knowledge-direct-session")).toBeNull();
+    },
+  );
 });

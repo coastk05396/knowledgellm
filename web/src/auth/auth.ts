@@ -7,6 +7,7 @@ import { appConfig, authConfigured, type AppConfig } from "../app/config";
 export interface Session {
   accessToken: string;
   name: string;
+  expiresAt?: number;
 }
 export function createAuthSettings(config: AppConfig): UserManagerSettings {
   return {
@@ -100,7 +101,21 @@ export async function signInAsPersona(department: string): Promise<Session> {
   const token = result.AuthenticationResult?.AccessToken;
   if (typeof token !== "string" || !token)
     throw new Error("No access token returned from Cognito.");
-  const session: Session = { accessToken: token, name: persona.name };
+  const expiresIn = result.AuthenticationResult?.ExpiresIn;
+  if (
+    typeof expiresIn !== "number" ||
+    !Number.isFinite(expiresIn) ||
+    expiresIn <= 0
+  )
+    throw new Error("No valid token expiry returned from Cognito.");
+  const expiresAt = Date.now() + expiresIn * 1000;
+  if (!Number.isSafeInteger(expiresAt))
+    throw new Error("Invalid token expiry returned from Cognito.");
+  const session: Session = {
+    accessToken: token,
+    name: persona.name,
+    expiresAt,
+  };
   sessionStorage.setItem("knowledge-direct-session", JSON.stringify(session));
   return session;
 }
