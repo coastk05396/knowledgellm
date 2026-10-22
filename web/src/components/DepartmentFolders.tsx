@@ -1,5 +1,5 @@
 import { useLanguage } from "../app/language";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { ChevronRight, FileText, Folder, LockKeyhole } from "lucide-react";
 import type { DocumentSummary } from "../app/api";
 import { identities } from "./IdentityPicker";
@@ -19,7 +19,7 @@ export function DepartmentFolders({
   const { t, language } = useLanguage();
   const [expandedDepartments, setExpandedDepartments] = useState<string[]>([]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setExpandedDepartments([]);
   }, [documents, authorizedListing]);
   return (
