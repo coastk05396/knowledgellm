@@ -3,7 +3,6 @@ import {
   LanguageProvider,
   LanguageSwitch,
   useLanguage,
-  type Language,
 } from "./language";
 import {
   useCallback,
@@ -16,12 +15,8 @@ import { Folder, MessageSquare, Terminal } from "lucide-react";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { Session } from "../auth/auth";
 import { authConfigured } from "./config";
-import {
-  knowledgeApi,
-  type DocumentSummary,
-  type KnowledgeApi,
-  type SourceDocument,
-} from "./api";
+import { knowledgeApi, type KnowledgeApi } from "./api";
+import { useWorkspaceSources } from "./workspaceSources";
 import { IdentityPicker, identities } from "../components/IdentityPicker";
 import { DepartmentFolders } from "../components/DepartmentFolders";
 import {
@@ -63,13 +58,9 @@ function WorkspaceContent({
   authError = null,
 }: WorkspaceProps) {
   const { t, language } = useLanguage();
-  const [documents, setDocuments] = useState<DocumentSummary[]>([]);
-  const [documentsLoadedFor, setDocumentsLoadedFor] = useState<{
-    session: Session;
-    language: Language;
-    api: KnowledgeApi;
-  } | null>(null);
-  const [loading, setLoading] = useState(Boolean(session));
+  const sources = useWorkspaceSources(session, language, api);
+  const { documents, loading, reader, authorizedListing, clearReader } =
+    sources;
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
@@ -78,29 +69,14 @@ function WorkspaceContent({
   );
   const [mobileView, setMobileView] = useState<"sources" | "chat">("sources");
   const [mobileMotion, setMobileMotion] = useState(false);
-  const [reader, setReader] = useState<
-    | (SourceRequest & {
-        request: number;
-        document?: SourceDocument;
-        failed?: boolean;
-      })
-    | null
-  >(null);
   const [readerClosing, setReaderClosing] = useState(false);
-  const documentGeneration = useRef(0);
-  const readerRequest = useRef(0);
   const readerOpener = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef(false);
   const sheetLayout = useSheetLayout();
-  /** Drops the open source and makes any in-flight source response stale. */
-  const clearReader = useCallback(() => {
-    readerRequest.current++;
-    setReader(null);
-    setReaderClosing(false);
-  }, []);
   const closeReader = useCallback(() => {
     restoreFocus.current = true;
     clearReader();
+    setReaderClosing(false);
   }, [clearReader]);
   /** The sheet leaves with an exit transition; the column closes at once. */
   const dismissReader = useCallback(() => {
@@ -121,53 +97,12 @@ function WorkspaceContent({
     setMessages([]);
     setError(null);
   }, [session, api]);
-  useEffect(() => {
-    const generation = ++documentGeneration.current;
-    let active = true;
-    setDocuments([]);
-    setError(null);
-    clearReader();
-    const invalidate = () => {
-      active = false;
-      documentGeneration.current++;
-    };
-    setDocumentsLoadedFor(null);
-    if (!session) {
-      setLoading(false);
-      return invalidate;
-    }
-    setLoading(true);
-    api
-      .loadDocuments(session.accessToken, language)
-      .then((docs) => {
-        if (active && generation === documentGeneration.current) {
-          setDocuments(docs);
-          setDocumentsLoadedFor({ session, language, api });
-        }
-      })
-      .catch(() => {
-        if (active && generation === documentGeneration.current)
-          setError(
-            "Documents are unavailable. Please check your connection and sign in again.",
-          );
-      })
-      .finally(() => {
-        if (active && generation === documentGeneration.current)
-          setLoading(false);
-      });
-    return invalidate;
-  }, [session, api, language, clearReader]);
+  useEffect(() => setError(null), [language]);
   const departments = identities
     .filter((person) =>
       documents.some((doc) => doc.department === person.department),
     )
     .map((person) => person.department);
-  const authorizedListing = Boolean(
-    session &&
-    documentsLoadedFor?.session === session &&
-    documentsLoadedFor.language === language &&
-    documentsLoadedFor.api === api,
-  );
   const name = t(session?.name ?? "Guest");
   const access = identities
     .filter((person) => departments.includes(person.department))
@@ -179,31 +114,10 @@ function WorkspaceContent({
     ? costs.reduce((total, value) => total + value, 0)
     : null;
   const openSource = async (source: SourceRequest, opener: HTMLElement) => {
-    if (!session || loading || !documents.some((doc) => doc.id === source.id)) {
-      setError("This source is not available to your account.");
-      return;
-    }
-    const generation = documentGeneration.current;
-    const request = ++readerRequest.current;
-    const current = () =>
-      generation === documentGeneration.current &&
-      request === readerRequest.current;
     readerOpener.current = opener;
-    setReader({ ...source, request });
     setReaderClosing(false);
-    try {
-      const document = await api.openDocument(
-        session.accessToken,
-        source.id,
-        language,
-      );
-      if (!current()) return;
-      if (new URL(document.url).protocol !== "https:")
-        throw new Error("Invalid source URL");
-      setReader({ ...source, request, document });
-    } catch {
-      if (current()) setReader({ ...source, request, failed: true });
-    }
+    if (!(await sources.openSource(source)))
+      setError("This source is not available to your account.");
   };
   const send = async (question: string) => {
     if (!session || !documents.length || busy) return false;
@@ -213,18 +127,13 @@ function WorkspaceContent({
     setBusy(true);
     setError(null);
     try {
-      const response = await api.askQuestion(
-        session.accessToken,
-        question,
-        language,
-      );
-      if (
-        response.citations.some(
-          (citation) =>
-            !documents.some((doc) => doc.id === citation.document_id),
-        )
-      )
-        throw new Error("Unknown citation");
+      const response = await sources.askQuestion(question);
+      if (!response) {
+        setMessages((current) =>
+          current.filter((message) => message !== pending),
+        );
+        return false;
+      }
       setMessages((current) =>
         current.map((message) =>
           message === pending ? { question, response } : message,
@@ -244,9 +153,8 @@ function WorkspaceContent({
     }
   };
   const switchAccount = (department?: string) => {
-    documentGeneration.current++;
-    clearReader();
-    setDocuments([]);
+    sources.invalidate();
+    setReaderClosing(false);
     setSuggestion(null);
     setMessages([]);
     setMobileMotion(false);
@@ -318,6 +226,7 @@ function WorkspaceContent({
           openedDocumentId={reader?.id ?? null}
           onNew={() => {
             clearReader();
+            setReaderClosing(false);
             setSuggestion(null);
             setMessages([]);
             setError(null);
@@ -337,21 +246,25 @@ function WorkspaceContent({
               </span>
             </p>
           )}
-          {(error || authError) && (
+          {(error || sources.error || authError) && (
             <p role="alert" className="error-message">
-              {t(error || authError || "")}
+              {t(error || sources.error || authError || "")}
             </p>
           )}
           {authLoading && (
             <p role="status">{t("Connecting to your account…")}</p>
           )}
-          {session && !loading && !documents.length && !error && (
-            <p role="status">
-              {t(
-                "Your account has no document access. Contact your workspace administrator.",
-              )}
-            </p>
-          )}
+          {session &&
+            !loading &&
+            !documents.length &&
+            !error &&
+            !sources.error && (
+              <p role="status">
+                {t(
+                  "Your account has no document access. Contact your workspace administrator.",
+                )}
+              </p>
+            )}
         </div>
         <SuggestedQuestions
           departments={departments.length ? departments : ["finance"]}

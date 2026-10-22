@@ -925,6 +925,50 @@ it("ignores a source response that arrives after a persona switch", async () => 
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
+it("ignores a pending answer after source access is invalidated", async () => {
+  let resolveAnswer!: (answer: {
+    answer: string;
+    citations: { document_id: string; title: string }[];
+  }) => void;
+  render(
+    <Workspace
+      session={session}
+      onSwitch={async () => {}}
+      api={{
+        loadDocuments: async () => financeDocuments,
+        askQuestion: () =>
+          new Promise((resolve) => {
+            resolveAnswer = resolve;
+          }),
+        openDocument: async () => ({
+          url: "https://docs.example.com/source.md",
+        }),
+      }}
+    />,
+  );
+  await findPermittedDocument("Q4 budget overview");
+  fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), {
+    target: { value: "Budget?" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send question" }));
+  const conversation = screen.getByRole("region", { name: "Conversation" });
+  expect(within(conversation).getByText("Budget?")).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Sign in as another account: Sam, Operations",
+    }),
+  );
+  await act(async () => {
+    resolveAnswer({
+      answer: "Old finance answer",
+      citations: [{ document_id: "finance-q4", title: "Q4 budget overview" }],
+    });
+  });
+  expect(screen.queryByText("Old finance answer")).not.toBeInTheDocument();
+  expect(within(conversation).queryByText("Budget?")).not.toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 it("presents the reader as a labelled dialog on narrow screens", async () => {
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query === "(max-width: 1100px)",
